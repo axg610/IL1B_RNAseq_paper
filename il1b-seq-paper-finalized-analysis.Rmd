@@ -22,4 +22,30 @@ library(tidyverse)
 source("modules/helpers.R")
 ```
 
+```{r setup core tc dataframes}
+tc_dea <- read_tsv("data/raw/A549_IL1B_Bud_tc_univariateDEA.txt") %>%
+  mutate(sig = case_when(
+    log2fold <= -1 & FDR <= 0.05 ~ "dn",
+    log2fold >=  1 & FDR <= 0.05 ~ "up",
+    TRUE ~ "ns"
+  )) %>%
+  group_by(Gene, treatment) %>%
+  mutate(
+    peak = time[which.max(abs(log2fold))],
+    peak_sig = sig[which(time == peak)]) %>%
+  ungroup() %>%
+  mutate(
+    time = factor(time, levels = c(1, 2, 6, 12, 24)),
+    peak = factor(peak, levels = c(1, 2, 6, 12, 24)),
+    sig = factor(sig, levels = c("up", "dn", "ns")),
+    peak_sig = factor(peak_sig, levels = c("up", "dn", "ns")),
+    treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "I+B"))
+  )
+
+tc_tpm <- read_tsv("data/raw/A549_IL1B_Bud_tc_tpm.txt") %>%
+  mutate(
+    time = factor(time, levels = c(1, 2, 6, 12, 24)),
+    treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "I+B"))
+  )
+```
 
