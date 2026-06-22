@@ -15,6 +15,10 @@ knitr::opts_chunk$set(
   message = FALSE
 )
 
+# plotting
+library(ComplexHeatmap)
+library(pheatmap)
+
 # tidyverse
 library(tidyverse)
 
@@ -149,7 +153,74 @@ ggplot(pca_distance, aes(x = time, y = dist)) +
   labs(y = "Euclidean distance from NS")
 
 
-# cleanup_objects()
+cleanup_objects()
 ```
+
+```{r fig 1d}
+#related to il1b-timecourse/modules/fig-il1b-heatmap.R
+
+goi <- tc_dea %>%
+  filter(peak_sig != "ns" & treatment == "IL1B") %>%
+  pull(Gene) %>% unique() %>% sort()
+
+mat <- tc_tpm %>%
+  filter(Gene %in% goi & treatment == "IL1B") %>%
+  mutate(sample = paste0("t", time, "h ", rep)) %>%
+  select(Gene, sample, log2fold) %>%
+  pivot_wider(names_from = "sample", values_from = "log2fold") %>%
+  select(
+    Gene, 
+    contains("t1h"), 
+    contains("t2h"), 
+    contains("t6h"), 
+    contains("t12h"), 
+    contains("t24h")
+    ) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+# %>% 
+#   { .[hclust(dist(.), method = "ward.D2")$order, ] }
+
+colors = circlize::colorRamp2(
+  seq(-5, 5, length = 200),
+  colorRampPalette(c("steelblue4", "steelblue3" , "white", "firebrick3", "firebrick4"))(200))
+
+columnSplits <- factor(
+  c(
+    rep("1", 4), 
+    rep("2", 4), 
+    rep("6", 4), 
+    rep("12", 4), 
+    rep("24", 4)), 
+  levels = c("1", "2", "6", "12", "24")
+)
+
+Heatmap(
+  mat,
+  col = colors,
+  cluster_rows = T, cluster_columns = F,
+  clustering_method_rows = "ward.D2",
+  show_row_dend = T, show_column_dend = F,
+  show_row_names = F, show_column_names = F,
+  column_split = columnSplits,
+  border = T,
+  use_raster = T
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
