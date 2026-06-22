@@ -49,3 +49,35 @@ tc_tpm <- read_tsv("data/raw/A549_IL1B_Bud_tc_tpm.txt") %>%
   )
 ```
 
+```{r fig 1a, fig.height=2.5, fig.width=2}
+df = tc_dea %>%
+  filter(treatment == "IL1B" & sig != "ns") %>%
+  select(Gene, sig) %>%
+  distinct() %>%
+  count(sig)
+
+ggplot(df, aes(x = sig, y = n)) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -1) +
+  theme(aspect.ratio = 2.5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+```
+
+
+```{r fig 1b, fig.height=2.5, fig.width=3}
+df = tc_dea %>%
+  filter(treatment == "IL1B" & peak_sig != "ns") %>%
+  select(Gene, peak_sig, peak) %>%
+  distinct() %>%
+  count(peak_sig, peak)
+
+ggplot(df, aes(x = peak, y = n)) +
+  facet_wrap(~peak_sig) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -1) +
+  theme(aspect.ratio = 1.5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+
+cleanup_objects()
+```
+
