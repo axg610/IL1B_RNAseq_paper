@@ -23,6 +23,9 @@ source("modules/helpers.R")
 ```
 
 ```{r setup core tc dataframes}
+
+# related to il1b-bud-timecourse/modules/dea-cleanup.R
+
 tc_dea <- read_tsv("data/raw/A549_IL1B_Bud_tc_univariateDEA.txt") %>%
   mutate(sig = case_when(
     log2fold <= -1 & FDR <= 0.05 ~ "dn",
@@ -63,7 +66,6 @@ ggplot(df, aes(x = sig, y = n)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
 ```
 
-
 ```{r fig 1b, fig.height=2.5, fig.width=3}
 df = tc_dea %>%
   filter(treatment == "IL1B" & peak_sig != "ns") %>%
@@ -80,4 +82,74 @@ ggplot(df, aes(x = peak, y = n)) +
 
 cleanup_objects()
 ```
+
+```{r fig 1c, fig.height=2.5, fig.width=3}
+
+# related to il1b-bud-timecourse/modules/pca.R
+
+# identify genes
+goi = tc_dea %>%
+  filter(treatment == "IL1B" & sig != "ns") %>%
+  pull(Gene) %>%
+  unique()
+
+# prep matrix
+mat = tc_tpm %>%
+  filter(
+    Gene %in% goi,
+    treatment %in% c("NS", "IL1B")
+  ) %>%
+  mutate(sample = paste(treatment, time, rep)) %>%
+  select(Gene, sample, log2tpm) %>%
+  pivot_wider(names_from = "sample", values_from = "log2tpm") %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+# run pca
+pca <- prcomp(t(mat), center = TRUE, scale. = FALSE)
+
+# convert pca output to df
+pca_df <- as.data.frame(pca$x) %>%
+  rownames_to_column("sample") %>%
+  separate(sample, into = c("treatment","time","rep"), sep = " ") %>%
+  mutate(
+    treatment = factor(treatment, levels = c("NS", "IL1B")),
+    time = factor(time, levels = c(1, 2, 6, 12, 24))
+  )
+
+# compute replicate-level distances from NS
+# check this !!!
+pca_distance <- pca_df %>%
+  select(treatment, rep, time, PC1, PC2) %>%
+  left_join(
+    pca_df %>%
+      filter(treatment == "NS") %>%
+      select(rep, time, PC1, PC2) %>%
+      rename(PC1_NS = PC1, PC2_NS = PC2),
+    by = c("rep", "time")
+  ) %>%
+  filter(treatment != "NS") %>%
+  mutate(
+    dist = sqrt(
+      (PC1 - PC1_NS)^2 + (PC2 - PC2_NS)^2
+    )
+  ) %>%
+  select(treatment, time, rep, dist)
+
+ggplot(pca_df, aes(x = PC1, y = PC2)) +
+  geom_point(aes(color = time, shape = treatment)) +
+  theme(
+    aspect.ratio = 1
+  ) +
+  labs(color = NULL, shape = NULL)
+
+ggplot(pca_distance, aes(x = time, y = dist)) +
+  stat_summary(geom = "col", fun = "mean") +
+  geom_point(shape = 21, fill = "white") +
+  labs(y = "Euclidean distance from NS")
+
+
+# cleanup_objects()
+```
+
 
