@@ -1,19 +1,7 @@
----
-title: "IL1B sequencing paper: finalized analysis"
-output:
-  html_document: default
-  pdf_document: default
-editor_options:
-  markdown:
-    wrap: 72
----
 
 ```{r setup, include = F}
-knitr::opts_chunk$set(
-  echo = FALSE,
-  warning = FALSE,
-  message = FALSE
-)
+# analysis
+library(clusterProfiler)
 
 # plotting
 library(ComplexHeatmap)
@@ -21,10 +9,15 @@ library(pheatmap)
 
 # tidyverse
 library(tidyverse)
+```
 
-# custom helpers
+
+
+```{r load helpers}
 source("modules/helpers.R")
 ```
+
+
 
 ```{r setup core tc dataframes}
 
@@ -70,6 +63,8 @@ ggplot(df, aes(x = sig, y = n)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
 ```
 
+
+
 ```{r fig 1b, fig.height=2.5, fig.width=3}
 df = tc_dea %>%
   filter(treatment == "IL1B" & peak_sig != "ns") %>%
@@ -86,6 +81,8 @@ ggplot(df, aes(x = peak, y = n)) +
 
 cleanup_objects()
 ```
+
+
 
 ```{r fig 1c, fig.height=2.5, fig.width=3}
 
@@ -155,6 +152,8 @@ ggplot(pca_distance, aes(x = time, y = dist)) +
 
 cleanup_objects()
 ```
+
+
 
 ```{r fig 1d}
 #related to il1b-timecourse/modules/fig-il1b-heatmap.R

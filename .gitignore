@@ -3,6 +3,7 @@
 .Rhistory
 .RData
 .Ruserdata
+*.Rproj*
 
 # RMarkdown
 *_cache/
