@@ -1,28 +1,18 @@
-*.RData
-*.Rhistory
 
+# R
+.Rhistory
+.RData
+.Ruserdata
+
+# RMarkdown
+*_cache/
+*_files/
+
+# binary outputs
 *.rds
 *.RDS
-*/*_cache/
-*_cache/
+*.RData
 
-*.gmt
-*.pdf
-*.xlsx
-*.pptx
-*.docx
-*.txt
-*.tsv
-*.txt
-*.png
-*.jpg
-*.jpeg
-*.svg
-*.html
-*.htm
-
-data
-rds
-old
-figures
-cleanup_ignore.txt
+# directories
+data/
+manuscript/
