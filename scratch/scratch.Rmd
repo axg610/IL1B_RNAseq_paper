@@ -7,6 +7,9 @@ library(clusterProfiler)
 library(ComplexHeatmap)
 library(pheatmap)
 
+# databases
+library(msigdbr)
+
 # tidyverse
 library(tidyverse)
 ```
@@ -14,7 +17,7 @@ library(tidyverse)
 
 
 ```{r load helpers}
-source("modules/helpers.R")
+source("R/helpers.R")
 ```
 
 
@@ -209,6 +212,51 @@ Heatmap(
 ```
 
 
+```{r fig 1e}
+# format hallmark for clusterProfiler
+hallmark <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  select("gs_name", "gene_symbol")
+
+# get ranked list
+ranks = tc_dea %>%
+  filter(treatment == "IL1B", sig != "ns", time == peak) %>%
+  select(Gene, log2fold) %>%
+  arrange(desc(log2fold)) %>%
+  deframe()
+
+# run gsea
+gsea = GSEA(
+  geneList = ranks,
+  TERM2GENE = hallmark,
+  pvalueCutoff = 1,
+  verbose = F
+)
+
+gsea_df = gsea %>%
+  as.tibble() %>%
+  select(
+    Description,
+    NES,
+    p.adjust
+  ) %>%
+  mutate(
+    Description = gsub("HALLMARK_", "", Description),
+    Description = gsub("_", " ", Description)
+    ) %>%
+  arrange(NES) %>%
+  mutate(Description = factor(Description, levels = unique(Description)))
+  
+ggplot(
+  gsea_df %>% filter(p.adjust <= 0.05),
+  aes(x = NES, y = Description, fill = -log10(p.adjust))
+) +
+  geom_col() +
+  theme(
+    aspect.ratio = 3
+  )
+
+barplot(ranks)
+```
 
 
 
