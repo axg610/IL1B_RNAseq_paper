@@ -57,6 +57,16 @@ goi = tc_dea %>%
   unique()
 ```
 
+3394 genes that are regulated by IL1B at their peak
+
+```{r genes of interest}
+# identify genes
+goi2 = tc_dea %>%
+  filter(treatment == "IL1B" & peak_sig != "ns") %>%
+  pull(Gene) %>%
+  unique()
+```
+
 Number of genes that are up- or down-regulated.
 
 ```{r fig 1a, fig.height=2.5, fig.width=2}
@@ -160,7 +170,7 @@ cleanup_objects()
 
 
 
-```{r fig 1d}
+```{r fig 1d, fig.height=4, fig.width=4, dpi=600}
 #related to il1b-timecourse/modules/fig-il1b-heatmap.R
 
 goi <- tc_dea %>%
@@ -209,17 +219,18 @@ Heatmap(
   show_row_names = F, show_column_names = F,
   column_split = columnSplits,
   border = T,
-  use_raster = T
+  use_raster = T,
+  name = "log2fold"
 )
 ```
 
 
-```{r fig 1e}
+```{r fig 1e, dpi=1200}
 # format hallmark for clusterProfiler
 hallmark <- msigdbr(species = "Homo sapiens", category = "H") %>%
   select("gs_name", "gene_symbol")
 
-# get ranked list
+# get ranked list of genes at their peak
 ranks = tc_dea %>%
   filter(treatment == "IL1B", sig != "ns", time == peak) %>%
   select(Gene, log2fold) %>%
@@ -255,6 +266,10 @@ ggplot(
   geom_col() +
   theme(
     aspect.ratio = 3
+  ) +
+  labs(
+    fill = expression(-log[10] * "(FDR)"),
+    y = NULL
   )
 
 barplot(ranks)
