@@ -24,8 +24,15 @@ source("../R/main-data.R")
 
 ```{r kinetic clustering}
 # pick genes
-goi_up = filter(tc_dea, treatment == "IL1B" & peak_sig == "up") %>% pull(Gene) %>% unique() %>% sort()
-goi_dn = filter(tc_dea, treatment == "IL1B" & peak_sig == "dn") %>% pull(Gene) %>% unique() %>% sort()
+goi_up = filter(tc_dea, treatment == "IL1B" & peak_sig == "up") %>% 
+  pull(Gene) %>% 
+  unique() %>% 
+  sort()
+
+goi_dn = filter(tc_dea, treatment == "IL1B" & peak_sig == "dn") %>% 
+  pull(Gene) %>% 
+  unique() %>% 
+  sort()
 
 set.seed(777)
 clust_up <- tc_dea %>%
@@ -53,8 +60,46 @@ clust_dn <- tc_dea %>%
   mutate(cluster = paste0("dn_", cluster)) %>%
   rownames_to_column("Gene")
 
-cluster_assignments = rbind(clust_up, clust_dn) %>% arrange(Gene)
+  
+cluster_assignments = rbind(clust_up, clust_dn) %>% 
+  arrange(Gene) %>%
+  mutate(
+    cluster = factor(
+      cluster,
+      levels = c(
+        "up_4", "up_2", "up_1", "up_5", "up_6", "up_7", "up_3",
+        "dn_4", "dn_3", "dn_1", "dn_2"
+      )
+    )
+  ) %>%
+  mutate(
+    shape = case_when(
+      cluster == "up_4" ~ "very early",
+      cluster == "up_2" ~ "early",
+      cluster == "up_1" ~ "mid",
+      cluster == "up_5" ~ "mid-late",
+      cluster == "up_6" ~ "sustained",
+      cluster == "up_7" ~ "mid-late",
+      cluster == "up_3" ~ "late",
+      cluster == "dn_4" ~ "early",
+      cluster == "dn_3" ~ "mid",
+      cluster == "dn_1" ~ "mid-late",
+      cluster == "dn_2" ~ "late"
+    )
+  ) %>%
+  mutate(
+    shape = factor(
+      shape,
+      levels = c(
+        "very early", "early", "mid", "mid-late", "late", "sustained"
+      )
+    )
+  )
 
+cleanup_objects()
+```
+
+```{r fig 2a}
 df = tc_dea %>%
   left_join(cluster_assignments, by = "Gene") %>%
   filter(
@@ -78,8 +123,30 @@ ggplot(
   facet_wrap(~cluster) +
   stat_summary(
     aes(group = cluster),
-    geom = "line", 
+    geom = "line",
     fun = "mean"
     ) +
   geom_hline(yintercept = 0, linetype = "dashed")
+
+# generate 
+ggplot(
+  df %>% filter(peak_sig == "up"),
+  aes(x = time, y = log2fold)
+) +
+  facet_wrap(
+    ~cluster,
+    ncol = 1,
+    scales = "free"
+    ) +
+  geom_line(
+    aes(group = Gene),
+    alpha = 0.1
+  ) +
+  stat_summary(
+    geom = "line",
+    fun = "mean",
+    aes(group = cluster),
+    color = "firebrick2",
+    lwd = 1
+  )
 ```
