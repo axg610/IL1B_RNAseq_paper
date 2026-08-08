@@ -1,0 +1,85 @@
+```{r setup, include = F}
+# analysis
+library(clusterProfiler)
+
+# plotting
+library(ComplexHeatmap)
+library(pheatmap)
+library(cowplot)
+
+# databases
+library(msigdbr)
+
+# tidyverse
+library(tidyverse)
+```
+
+```{r load helpers}
+source("../R/helpers.R")
+```
+
+```{r load data}
+source("../R/main-data.R")
+```
+
+```{r kinetic clustering}
+# pick genes
+goi_up = filter(tc_dea, treatment == "IL1B" & peak_sig == "up") %>% pull(Gene) %>% unique() %>% sort()
+goi_dn = filter(tc_dea, treatment == "IL1B" & peak_sig == "dn") %>% pull(Gene) %>% unique() %>% sort()
+
+set.seed(777)
+clust_up <- tc_dea %>%
+  filter(treatment == "IL1B" & Gene %in% goi_up) %>%
+  select(Gene, time, log2fold) %>%
+  pivot_wider(names_from = "time", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  t() %>% scale() %>% t() %>%                          # z-score per gene across time
+  kmeans(centers = 7, nstart = 7, iter.max = 100) %>%
+  .$cluster %>%
+  as.data.frame(nm = "cluster") %>%
+  mutate(cluster = paste0("up_", cluster)) %>%
+  rownames_to_column("Gene")
+
+set.seed(777)
+clust_dn <- tc_dea %>%
+  filter(treatment == "IL1B" & Gene %in% goi_dn) %>%
+  select(Gene, time, log2fold) %>%
+  pivot_wider(names_from = "time", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  t() %>% scale() %>% t() %>%
+  kmeans(centers = 4, nstart = 4, iter.max = 100) %>%
+  .$cluster %>%
+  as.data.frame(nm = "cluster") %>%
+  mutate(cluster = paste0("dn_", cluster)) %>%
+  rownames_to_column("Gene")
+
+cluster_assignments = rbind(clust_up, clust_dn) %>% arrange(Gene)
+
+df = tc_dea %>%
+  left_join(cluster_assignments, by = "Gene") %>%
+  filter(
+    !is.na(cluster),
+    treatment == "IL1B"
+    ) %>%
+  mutate(
+    cluster = factor(
+      cluster,
+      levels = c(
+        "up_4", "up_2", "up_1", "up_5", "up_6", "up_7", "up_3",
+        "dn_4", "dn_3", "dn_1", "dn_2"
+      )
+    )
+  )
+
+ggplot(
+  df,
+  aes(x = time, y = log2fold)
+  ) +
+  facet_wrap(~cluster) +
+  stat_summary(
+    aes(group = cluster),
+    geom = "line", 
+    fun = "mean"
+    ) +
+  geom_hline(yintercept = 0, linetype = "dashed")
+```
