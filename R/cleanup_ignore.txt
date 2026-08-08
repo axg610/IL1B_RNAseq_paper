@@ -1,3 +1,6 @@
 cleanup_objects
 tc_dea
 tc_tpm
+goi
+goi2
+

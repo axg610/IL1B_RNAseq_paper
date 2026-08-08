@@ -47,7 +47,7 @@ tc_tpm <- read_tsv("../data/raw/A549_IL1B_Bud_tc_tpm.txt") %>%
   )
 ```
 
-3431 IL1B-regulated genes over the timecourse.
+3431 genes that are regulated by IL1B at any time.
 
 ```{r genes of interest}
 # identify genes
@@ -71,6 +71,8 @@ ggplot(df, aes(x = sig, y = n)) +
   geom_text(aes(label = n), vjust = -1) +
   theme(aspect.ratio = 2.5) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+
+cleanup_objects()
 ```
 
 Number of genes that are up- or down-regulated at each peak
@@ -89,7 +91,7 @@ ggplot(df, aes(x = peak, y = n)) +
   theme(aspect.ratio = 1.5) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
 
-rm(df)
+cleanup_objects()
 ```
 
 
@@ -153,7 +155,7 @@ ggplot(pca_distance, aes(x = time, y = dist)) +
   labs(y = "Euclidean distance from NS")
 
 
-rm(pca, pca_df, pca_distance)
+cleanup_objects()
 ```
 
 
