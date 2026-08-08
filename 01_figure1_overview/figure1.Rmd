@@ -1,0 +1,334 @@
+```{r setup, include = F}
+# analysis
+library(clusterProfiler)
+
+# plotting
+library(ComplexHeatmap)
+library(pheatmap)
+library(cowplot)
+
+# databases
+library(msigdbr)
+
+# tidyverse
+library(tidyverse)
+```
+
+```{r load helpers}
+source("../R/helpers.R")
+```
+
+```{r load data}
+# related to il1b-bud-timecourse/modules/dea-cleanup.R
+
+tc_dea <- read_tsv("../data/raw/A549_IL1B_Bud_tc_univariateDEA.txt") %>%
+  mutate(sig = case_when(
+    log2fold <= -1 & FDR <= 0.05 ~ "dn",
+    log2fold >=  1 & FDR <= 0.05 ~ "up",
+    TRUE ~ "ns"
+  )) %>%
+  group_by(Gene, treatment) %>%
+  mutate(
+    peak = time[which.max(abs(log2fold))],
+    peak_sig = sig[which(time == peak)]) %>%
+  ungroup() %>%
+  mutate(
+    time = factor(time, levels = c(1, 2, 6, 12, 24)),
+    peak = factor(peak, levels = c(1, 2, 6, 12, 24)),
+    sig = factor(sig, levels = c("up", "dn", "ns")),
+    peak_sig = factor(peak_sig, levels = c("up", "dn", "ns")),
+    treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "I+B"))
+  )
+
+tc_tpm <- read_tsv("../data/raw/A549_IL1B_Bud_tc_tpm.txt") %>%
+  mutate(
+    time = factor(time, levels = c(1, 2, 6, 12, 24)),
+    treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "I+B"))
+  )
+```
+
+3431 IL1B-regulated genes over the timecourse.
+
+```{r genes of interest}
+# identify genes
+goi = tc_dea %>%
+  filter(treatment == "IL1B" & sig != "ns") %>%
+  pull(Gene) %>%
+  unique()
+```
+
+Number of genes that are up- or down-regulated.
+
+```{r fig 1a, fig.height=2.5, fig.width=2}
+df = tc_dea %>%
+  filter(treatment == "IL1B" & sig != "ns") %>%
+  select(Gene, sig) %>%
+  distinct() %>%
+  count(sig)
+
+ggplot(df, aes(x = sig, y = n)) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -1) +
+  theme(aspect.ratio = 2.5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+```
+
+Number of genes that are up- or down-regulated at each peak
+
+```{r fig 1b, fig.height=2.5, fig.width=3}
+df = tc_dea %>%
+  filter(treatment == "IL1B" & peak_sig != "ns") %>%
+  select(Gene, peak_sig, peak) %>%
+  distinct() %>%
+  count(peak_sig, peak)
+
+ggplot(df, aes(x = peak, y = n)) +
+  facet_wrap(~peak_sig) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -1) +
+  theme(aspect.ratio = 1.5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+
+rm(df)
+```
+
+
+
+```{r fig 1c, fig.height=2.5, fig.width=3}
+
+# related to il1b-bud-timecourse/modules/pca.R
+
+# prep matrix
+mat = tc_tpm %>%
+  filter(
+    Gene %in% goi,
+    treatment %in% c("NS", "IL1B")
+  ) %>%
+  mutate(sample = paste(treatment, time, rep)) %>%
+  select(Gene, sample, log2tpm) %>%
+  pivot_wider(names_from = "sample", values_from = "log2tpm") %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+# run pca
+pca <- prcomp(t(mat), center = TRUE, scale. = FALSE)
+
+# convert pca output to df
+pca_df <- as.data.frame(pca$x) %>%
+  rownames_to_column("sample") %>%
+  separate(sample, into = c("treatment","time","rep"), sep = " ") %>%
+  mutate(
+    treatment = factor(treatment, levels = c("NS", "IL1B")),
+    time = factor(time, levels = c(1, 2, 6, 12, 24))
+  )
+
+# compute replicate-level distances from NS
+pca_distance <- pca_df %>%
+  select(treatment, rep, time, PC1, PC2) %>%
+  left_join(
+    pca_df %>%
+      filter(treatment == "NS") %>%
+      select(rep, time, PC1, PC2) %>%
+      rename(PC1_NS = PC1, PC2_NS = PC2),
+    by = c("rep", "time")
+  ) %>%
+  filter(treatment != "NS") %>%
+  mutate(
+    dist = sqrt(
+      (PC1 - PC1_NS)^2 + (PC2 - PC2_NS)^2
+    )
+  ) %>%
+  select(treatment, time, rep, dist)
+
+ggplot(pca_df, aes(x = PC1, y = PC2)) +
+  geom_point(aes(color = time, shape = treatment)) +
+  theme(
+    aspect.ratio = 1
+  ) +
+  labs(color = NULL, shape = NULL)
+
+ggplot(pca_distance, aes(x = time, y = dist)) +
+  stat_summary(geom = "col", fun = "mean") +
+  geom_point(shape = 21, fill = "white") +
+  labs(y = "Euclidean distance from NS")
+
+
+rm(pca, pca_df, pca_distance)
+```
+
+
+
+```{r fig 1d}
+#related to il1b-timecourse/modules/fig-il1b-heatmap.R
+
+goi <- tc_dea %>%
+  filter(peak_sig != "ns" & treatment == "IL1B") %>%
+  pull(Gene) %>% unique() %>% sort()
+
+mat <- tc_tpm %>%
+  filter(Gene %in% goi & treatment == "IL1B") %>%
+  mutate(sample = paste0("t", time, "h ", rep)) %>%
+  select(Gene, sample, log2fold) %>%
+  pivot_wider(names_from = "sample", values_from = "log2fold") %>%
+  select(
+    Gene, 
+    contains("t1h"), 
+    contains("t2h"), 
+    contains("t6h"), 
+    contains("t12h"), 
+    contains("t24h")
+    ) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+# %>% 
+#   { .[hclust(dist(.), method = "ward.D2")$order, ] }
+
+colors = circlize::colorRamp2(
+  seq(-5, 5, length = 200),
+  colorRampPalette(c("steelblue4", "steelblue3" , "white", "firebrick3", "firebrick4"))(200))
+
+columnSplits <- factor(
+  c(
+    rep("1", 4), 
+    rep("2", 4), 
+    rep("6", 4), 
+    rep("12", 4), 
+    rep("24", 4)), 
+  levels = c("1", "2", "6", "12", "24")
+)
+
+Heatmap(
+  mat,
+  col = colors,
+  cluster_rows = T, cluster_columns = F,
+  clustering_method_rows = "ward.D2",
+  show_row_dend = T, show_column_dend = F,
+  show_row_names = F, show_column_names = F,
+  column_split = columnSplits,
+  border = T,
+  use_raster = T
+)
+```
+
+
+```{r fig 1e}
+# format hallmark for clusterProfiler
+hallmark <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  select("gs_name", "gene_symbol")
+
+# get ranked list
+ranks = tc_dea %>%
+  filter(treatment == "IL1B", sig != "ns", time == peak) %>%
+  select(Gene, log2fold) %>%
+  arrange(desc(log2fold)) %>%
+  deframe()
+
+# run gsea
+gsea = GSEA(
+  geneList = ranks,
+  TERM2GENE = hallmark,
+  pvalueCutoff = 1,
+  verbose = F
+)
+
+gsea_df = gsea %>%
+  as.tibble() %>%
+  select(
+    Description,
+    NES,
+    p.adjust
+  ) %>%
+  mutate(
+    Description = gsub("HALLMARK_", "", Description),
+    Description = gsub("_", " ", Description)
+    ) %>%
+  arrange(NES) %>%
+  mutate(Description = factor(Description, levels = unique(Description)))
+  
+ggplot(
+  gsea_df %>% filter(p.adjust <= 0.05),
+  aes(x = NES, y = Description, fill = -log10(p.adjust))
+) +
+  geom_col() +
+  theme(
+    aspect.ratio = 3
+  )
+
+barplot(ranks)
+```
+
+
+```{r kinetic clustering}
+# pick genes
+goi_up = filter(tc_dea, treatment == "IL1B" & peak_sig == "up") %>% pull(Gene) %>% unique() %>% sort()
+goi_dn = filter(tc_dea, treatment == "IL1B" & peak_sig == "dn") %>% pull(Gene) %>% unique() %>% sort()
+
+set.seed(777)
+clust_up <- tc_dea %>%
+  filter(treatment == "IL1B" & Gene %in% goi_up) %>%
+  select(Gene, time, log2fold) %>%
+  pivot_wider(names_from = "time", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  t() %>% scale() %>% t() %>%                          # z-score per gene across time
+  kmeans(centers = 7, nstart = 7, iter.max = 100) %>%
+  .$cluster %>%
+  as.data.frame(nm = "cluster") %>%
+  mutate(cluster = paste0("up_", cluster)) %>%
+  rownames_to_column("Gene")
+
+set.seed(777)
+clust_dn <- tc_dea %>%
+  filter(treatment == "IL1B" & Gene %in% goi_dn) %>%
+  select(Gene, time, log2fold) %>%
+  pivot_wider(names_from = "time", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  t() %>% scale() %>% t() %>%
+  kmeans(centers = 4, nstart = 4, iter.max = 100) %>%
+  .$cluster %>%
+  as.data.frame(nm = "cluster") %>%
+  mutate(cluster = paste0("dn_", cluster)) %>%
+  rownames_to_column("Gene")
+
+cluster_assignments = rbind(clust_up, clust_dn) %>% arrange(Gene)
+
+df = tc_dea %>%
+  left_join(cluster_assignments, by = "Gene") %>%
+  filter(
+    !is.na(cluster),
+    treatment == "IL1B"
+    ) %>%
+  mutate(
+    cluster = factor(
+      cluster,
+      levels = c(
+        "up_4", "up_2", "up_1", "up_5", "up_6", "up_7", "up_3",
+        "dn_4", "dn_3", "dn_1", "dn_2"
+      )
+    )
+  )
+
+ggplot(
+  df,
+  aes(x = time, y = log2fold)
+  ) +
+  facet_wrap(~cluster) +
+  stat_summary(
+    aes(group = cluster),
+    geom = "line", 
+    fun = "mean"
+    ) +
+  geom_hline(yintercept = 0, linetype = "dashed")
+```
+
+
+
+
+
+
+
+
+
+
+
+
