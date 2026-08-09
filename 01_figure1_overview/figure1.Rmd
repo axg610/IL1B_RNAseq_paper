@@ -200,7 +200,7 @@ Heatmap(
 ```
 
 
-```{r fig 1e, dpi=1200}
+```{r fig 1e}
 # format hallmark for clusterProfiler
 hallmark <- msigdbr(species = "Homo sapiens", category = "H") %>%
   select("gs_name", "gene_symbol")
@@ -239,9 +239,12 @@ ggplot(
   aes(x = NES, y = Description, fill = -log10(p.adjust))
 ) +
   geom_col() +
+  theme_bw() +
   theme(
-    aspect.ratio = 3
+    aspect.ratio = 3,
+    panel.grid = element_blank()
   ) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", lwd = 0.5) +
   labs(
     fill = expression(-log[10] * "(FDR)"),
     y = NULL
