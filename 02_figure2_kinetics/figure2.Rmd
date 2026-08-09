@@ -391,4 +391,49 @@ base_plot(
 
 ```
 
+```{r find example genes}
+cluster_candidates = tibble()
+
+for(gn in unique(cluster_assignments$groupName)){
+  
+  g = cluster_assignments %>%
+    filter(groupName == gn) %>%
+    pull(Gene)
+  
+  mat = tc_dea %>%
+    filter(treatment == "IL1B", Gene %in% g) %>%
+    select(Gene, time, log2fold) %>%
+    pivot_wider(values_from = "log2fold", names_from = "time") %>%
+    column_to_rownames("Gene") %>%
+    as.matrix() %>%
+    t() %>% scale() %>% t()
+  
+  centroid = colMeans(mat)
+  
+  cor_to_centroid = apply(mat, 1, function(x) {cor(x, centroid)})
+  
+  df = data.frame(correlation = cor_to_centroid) %>%
+    rownames_to_column("Gene") %>%
+    arrange(desc(correlation)) %>%
+    slice_head(n = 20) %>%
+    mutate(groupName = gn, .before = 1)
+  
+  cluster_candidates = rbind(cluster_candidates, df)
+  
+}
+
+saveRDS(cluster_candidates, "../results/figure2/cluster_candidates.rds")
+write_tsv(cluster_candidates, "../results/figure2/cluster_candidates.txt")
+
+cleanup_objects()
+```
+
+
+
+
+
+
+
+
+
 
