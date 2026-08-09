@@ -10,6 +10,7 @@ library(cowplot)
 
 # databases
 library(msigdbr)
+library(org.Hs.eg.db)
 
 # tidyverse
 library(tidyverse)
@@ -102,6 +103,13 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
     )
   ) %>%
   mutate(
+    peak_sig = case_when(
+      str_detect(cluster, "up_") ~ "up",
+      str_detect(cluster, "dn_") ~ "dn"
+    )
+  ) %>%
+  mutate(peak_sig = factor(peak_sig, levels = c("up", "dn"))) %>%
+  mutate(
     shape = case_when(
       cluster == "up_4" ~ "very early",
       cluster == "up_3" ~ "early",
@@ -122,7 +130,8 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
         "very early", "early", "mid", "mid-late", "mid-late-2", "late", "sustained"
       )
     )
-  )
+  ) %>%
+  mutate(groupName = paste0(peak_sig, "_", shape))
 
 # check clusters
 df = tc_dea %>%
@@ -149,7 +158,7 @@ cleanup_objects()
 
 ```{r fig 2a, fig.height=6, fig.width=3}
 df = tc_dea %>%
-  left_join(cluster_assignments, by = "Gene") %>%
+  left_join(cluster_assignments, by = c("Gene", "peak_sig")) %>%
   filter(
     !is.na(cluster),
     treatment == "IL1B"
@@ -207,3 +216,179 @@ ggplot(
 
 cleanup_objects()
 ```
+
+```{r run gene ontology}
+# enrichGO function
+run_enrichGO <- function(
+  geneList,
+  geneUniverse = unique(tc_tpm$Gene),
+  geneOntology = "BP",
+  groupName = "groupName",
+  simplify = F
+){
+  
+  print(paste("Running GO with", geneOntology, "on group", groupName, "..."))
+  
+  go = enrichGO(
+    gene = geneList,
+    universe = geneUniverse,
+    OrgDb = org.Hs.eg.db,
+    keyType       = "SYMBOL",
+    ont           = geneOntology,
+    pAdjustMethod = "BH",
+    qvalueCutoff  = 0.05,
+    readable      = TRUE
+  )
+  
+  if (simplify){
+    
+    print("Simplifying...")
+    
+    go <- clusterProfiler::simplify(
+      go,
+      cutoff = 0.7,
+      by = "p.adjust",
+      select_fun = min
+    )
+    
+  }
+  
+  go@result %>%
+    mutate(groupName = groupName, .before = 1) %>%
+    mutate(Ontology = geneOntology, .before = ID)
+  
+}
+
+
+# run enrichGO over all clusters
+
+all_genes = unique(tc_tpm$Gene)
+
+clusters_enrichGO = list()
+
+
+for(gn in unique(cluster_assignments$groupName)){
+  
+  genelist = cluster_assignments %>%
+    filter(groupName == gn) %>%
+    pull(Gene)
+    
+  bp = run_enrichGO(
+    genelist,
+    all_genes,
+    "BP",
+    gn,
+    simplify = T
+  )
+  
+  mf = run_enrichGO(
+    genelist,
+    all_genes,
+    "MF",
+    gn,
+    simplify = T
+  )
+  
+  df = rbind(bp, mf)
+  
+  clusters_enrichGO[[gn]] = df
+}
+
+saveRDS(clusters_enrichGO, "../results/figure2/clusters_enrichGO.rds")
+
+cleanup_objects()
+```
+
+```{r fig ???, fig.height=3.5, fig.width=5}
+clusters_enrichGO = read_rds("../results/figure2/clusters_enrichGO.rds")
+
+# function to prepare dataframes
+prep_go <- function(
+    df,
+    countThreshold = 15
+    ) {
+  
+  df %>%
+    filter(Count >= countThreshold) %>%
+    slice_max(FoldEnrichment, n = 10, with_ties = FALSE) %>%
+    mutate(
+      Description = str_wrap(str_trunc(Description, 60), 35),
+      Description = factor(Description, levels = rev(Description))
+    )
+  
+}
+
+
+
+# function to generate the base plot
+base_plot <- function(
+    df, 
+    title = NULL,
+    size_limits = NULL,
+    x_limits = NULL,
+    fill_limits = NULL) {
+  ggplot(
+    df,
+    aes(
+      x = FoldEnrichment,
+      y = Description,
+      fill = -log10(p.adjust),
+      size = Count
+    )
+  ) +
+    geom_point(shape = 21) +
+    scale_size(
+      limits = size_limits, range = c(2, 8), breaks = scales::breaks_pretty(n=3)
+    ) +
+    viridis::scale_fill_viridis(
+      option = "viridis",
+      limits = fill_limits
+    ) +
+    scale_x_continuous(
+      limits = x_limits,
+      expand = expansion(mult = 0.15),
+      breaks = scales::breaks_pretty(n = 3)
+    ) +
+    labs(
+      x = "fold enrichment", 
+      y = title,
+      size = "count",
+      fill = expression(log[10] * "FDR")
+    ) +
+    theme_bw() +
+    theme(
+      aspect.ratio = 3,
+      panel.grid.minor = element_blank()
+    )
+}
+
+# plots
+
+fillLimits = c(0, 40)
+sizeLimits = c(1, 60)
+
+base_plot(
+  prep_go(clusters_enrichGO[["up_early"]]), 
+  "up, early", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["up_mid"]]), 
+  "up, mid", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["dn_late"]], countThreshold = 5), 
+  "down, late", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+```
+
+
