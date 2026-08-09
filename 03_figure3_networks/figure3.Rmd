@@ -99,5 +99,7 @@ Heatmap(
   column_names_rot = 0,
   column_names_centered = T
 )
+
+cleanup_objects()
 ```
 
