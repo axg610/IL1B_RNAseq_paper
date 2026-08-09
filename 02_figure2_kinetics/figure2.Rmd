@@ -1,6 +1,7 @@
 ```{r setup, include = F}
 # analysis
 library(clusterProfiler)
+library(factoextra)
 
 # plotting
 library(ComplexHeatmap)
@@ -22,7 +23,7 @@ source("../R/helpers.R")
 source("../R/main-data.R")
 ```
 
-```{r kinetic clustering}
+```{r cluster kinetics}
 # pick genes
 goi_up = filter(tc_dea, treatment == "IL1B" & peak_sig == "up") %>% 
   pull(Gene) %>% 
@@ -34,40 +35,68 @@ goi_dn = filter(tc_dea, treatment == "IL1B" & peak_sig == "dn") %>%
   unique() %>% 
   sort()
 
-set.seed(777)
-clust_up <- tc_dea %>%
-  filter(treatment == "IL1B" & Gene %in% goi_up) %>%
-  select(Gene, time, log2fold) %>%
-  pivot_wider(names_from = "time", values_from = "log2fold") %>%
-  column_to_rownames("Gene") %>%
-  t() %>% scale() %>% t() %>%                          # z-score per gene across time
-  kmeans(centers = 7, nstart = 7, iter.max = 100) %>%
-  .$cluster %>%
-  as.data.frame(nm = "cluster") %>%
-  mutate(cluster = paste0("up_", cluster)) %>%
-  rownames_to_column("Gene")
+# k-means function
+run_kmeans <- function(
+    geneList,
+    dataFrame = tc_dea,
+    clusterPrefix,
+    nClusters,
+    ttt = "IL1B",
+    clusterOptimizationMode = F
+){
+    
+    # build matrix
+    mat = dataFrame %>%
+      filter(treatment == ttt & Gene %in% geneList) %>%
+      select(Gene, time, log2fold) %>%
+      pivot_wider(names_from = "time", values_from = "log2fold") %>%
+      column_to_rownames("Gene") %>%
+      t() %>% scale() %>% t()
+    
+    if (!clusterOptimizationMode){
+      
+      # run clustering
+      set.seed(777)
+      clust = mat %>%
+        kmeans(centers = nClusters, nstart = nClusters, iter.max = 100) %>%
+        .$cluster %>%
+        as.data.frame(nm = "cluster") %>%
+        mutate(cluster = paste0(clusterPrefix, cluster)) %>%
+        rownames_to_column("Gene")
+      
+      return(clust)
+      
+    }
+    
+    else {
+      
+      # optimize #clusters
+      sil = fviz_nbclust(mat, kmeans, method = "silhouette", linecolor = "black")
+      wss = fviz_nbclust(mat, kmeans, method = "wss", linecolor = "black")
+      
+      print(sil)
+      print(wss)
+      
+    }
+    
+}
 
-set.seed(777)
-clust_dn <- tc_dea %>%
-  filter(treatment == "IL1B" & Gene %in% goi_dn) %>%
-  select(Gene, time, log2fold) %>%
-  pivot_wider(names_from = "time", values_from = "log2fold") %>%
-  column_to_rownames("Gene") %>%
-  t() %>% scale() %>% t() %>%
-  kmeans(centers = 4, nstart = 4, iter.max = 100) %>%
-  .$cluster %>%
-  as.data.frame(nm = "cluster") %>%
-  mutate(cluster = paste0("dn_", cluster)) %>%
-  rownames_to_column("Gene")
+# run tests
+run_kmeans(geneList = goi_up, clusterOptimizationMode = T)
+run_kmeans(geneList = goi_dn, clusterOptimizationMode = T)
 
-  
+# run clustering
+clust_up = run_kmeans(geneList = goi_up, clusterPrefix = "up_", nClusters = 6)
+clust_dn = run_kmeans(geneList = goi_dn, clusterPrefix = "dn_", nClusters = 4)
+
+# name clusters
 cluster_assignments = rbind(clust_up, clust_dn) %>% 
   arrange(Gene) %>%
   mutate(
     cluster = factor(
       cluster,
       levels = c(
-        "up_4", "up_2", "up_1", "up_5", "up_6", "up_7", "up_3",
+        "up_4", "up_3", "up_5", "up_2", "up_6", "up_1",
         "dn_4", "dn_3", "dn_1", "dn_2"
       )
     )
@@ -75,12 +104,11 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
   mutate(
     shape = case_when(
       cluster == "up_4" ~ "very early",
-      cluster == "up_2" ~ "early",
-      cluster == "up_1" ~ "mid",
-      cluster == "up_5" ~ "mid-late",
-      cluster == "up_6" ~ "sustained",
-      cluster == "up_7" ~ "mid-late",
-      cluster == "up_3" ~ "late",
+      cluster == "up_3" ~ "early",
+      cluster == "up_5" ~ "mid",
+      cluster == "up_2" ~ "mid-late",
+      cluster == "up_6" ~ "late",
+      cluster == "up_1" ~ "sustained",
       cluster == "dn_4" ~ "early",
       cluster == "dn_3" ~ "mid",
       cluster == "dn_1" ~ "mid-late",
@@ -91,30 +119,18 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
     shape = factor(
       shape,
       levels = c(
-        "very early", "early", "mid", "mid-late", "late", "sustained"
+        "very early", "early", "mid", "mid-late", "mid-late-2", "late", "sustained"
       )
     )
   )
 
-cleanup_objects()
-```
-
-```{r fig 2a}
+# check clusters
 df = tc_dea %>%
   left_join(cluster_assignments, by = "Gene") %>%
   filter(
     !is.na(cluster),
     treatment == "IL1B"
-    ) %>%
-  mutate(
-    cluster = factor(
-      cluster,
-      levels = c(
-        "up_4", "up_2", "up_1", "up_5", "up_6", "up_7", "up_3",
-        "dn_4", "dn_3", "dn_1", "dn_2"
-      )
     )
-  )
 
 ggplot(
   df,
@@ -128,16 +144,30 @@ ggplot(
     ) +
   geom_hline(yintercept = 0, linetype = "dashed")
 
-# generate 
+cleanup_objects()
+```
+
+```{r fig 2a, fig.height=6, fig.width=3}
+df = tc_dea %>%
+  left_join(cluster_assignments, by = "Gene") %>%
+  filter(
+    !is.na(cluster),
+    treatment == "IL1B"
+    )
+
 ggplot(
-  df %>% filter(peak_sig == "up"),
+  df,
   aes(x = time, y = log2fold)
 ) +
-  facet_wrap(
-    ~cluster,
-    ncol = 1,
-    scales = "free"
-    ) +
+  facet_grid(
+    shape~peak_sig,
+    labeller = labeller(
+      peak_sig = c(
+        "up" = "upreg",
+        "dn" = "downreg"
+      )
+    )
+  ) +
   geom_line(
     aes(group = Gene),
     alpha = 0.1
@@ -145,8 +175,35 @@ ggplot(
   stat_summary(
     geom = "line",
     fun = "mean",
-    aes(group = cluster),
-    color = "firebrick2",
+    aes(group = cluster, color = peak_sig),
     lwd = 1
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "black",
+    lwd = 0.5
+  ) +
+  coord_cartesian(
+    ylim = c(3, -3)
+  ) +
+  scale_color_manual(
+    values = c("firebrick2", "steelblue2")
+  ) +
+  scale_x_discrete(
+    expand = expansion(mult = 0.05)
+  ) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1,
+    strip.background = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    x = "time (h)",
+    y = "log2fold"
   )
+
+cleanup_objects()
 ```
