@@ -79,7 +79,11 @@ tfs_of_interest = mat_viper %>%
 top_tfs_mat = mat_viper[tfs_of_interest, ]
 
 colors = circlize::colorRamp2(
-  seq(-10, 10, length = 200),
+  c(
+    seq(-8, -3.5, length = 90),
+    seq(-3.4, 3.4, length = 20),
+    seq(3.4, 8, length = 90)
+  ),
   colorRampPalette(
     c("orchid4", "orchid2", "white", "aquamarine2", "aquamarine4")
   )(200)
