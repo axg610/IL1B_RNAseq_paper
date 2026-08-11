@@ -111,7 +111,7 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
   mutate(peak_sig = factor(peak_sig, levels = c("up", "dn"))) %>%
   mutate(
     shape = case_when(
-      cluster == "up_4" ~ "very early",
+      cluster == "up_4" ~ "immediate",
       cluster == "up_3" ~ "early",
       cluster == "up_5" ~ "mid",
       cluster == "up_2" ~ "mid-late",
@@ -127,7 +127,7 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
     shape = factor(
       shape,
       levels = c(
-        "very early", "early", "mid", "mid-late", "mid-late-2", "late", "sustained"
+        "immediate", "early", "mid", "mid-late", "late", "sustained"
       )
     )
   ) %>%
@@ -428,6 +428,22 @@ write_tsv(cluster_candidates, "../results/figure2/cluster_candidates.txt")
 cleanup_objects()
 ```
 
+```{r plot example genes, fig.height=2, fig.width=2}
+ggplot(
+  filter(tc_tpm, Gene == "ICAM1", treatment == "IL1B"),
+  aes(x = time, y = log2fold, group = Gene)
+) +
+  facet_wrap(~Gene) +
+  stat_summary(geom = "point", fun = "mean") +
+  stat_summary(geom = "errorbar", fun.data = "mean_sdl", fun.args = list(mult = 1),
+               width = 0.3) +
+  stat_summary(geom = "line", fun = "mean") +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    aspect.ratio = 1
+  )
+```
 
 
 
