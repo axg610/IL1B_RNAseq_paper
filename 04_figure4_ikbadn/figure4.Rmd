@@ -1,0 +1,188 @@
+```{r setup}
+# plotting
+library(ComplexHeatmap)
+library(pheatmap)
+library(eulerr)
+
+# tidyverse
+library(tidyverse)
+```
+
+```{r load helpers}
+source("../R/helpers.R")
+```
+
+```{r load data}
+source("../R/main-data.R")
+```
+
+```{r volcano, fig.height=3, fig.width=4}
+df <- ikba_dea %>%
+  filter(treatment == "IL1B") %>%
+  mutate(log10FDR = -log10(FDR)) %>%
+  mutate(log10FDR = if_else(is.infinite(log10FDR), 300, log10FDR))
+
+summary <- df %>%
+  group_by(time, condition) %>%
+  summarize(
+    n_ns = length(unique(Gene[sig == "ns"])),
+    n_up = length(unique(Gene[sig == "up"])),
+    n_dn = length(unique(Gene[sig == "dn"])),
+    .groups = "drop"
+  ) %>%
+  # mutate(label = paste0(
+  #   n_up, " up\n",
+  #   n_dn, " down\n",
+  #   n_ns, " ns"
+  # ))
+  mutate(label = paste0(
+    n_up, " up\n",
+    n_dn, " down"
+  ))
+
+ggplot(
+  df,
+  aes(x = log2fold, y = log10FDR)
+) +
+  facet_grid(
+    condition~time,
+    labeller = labeller(
+      time = c("1" = "1h", "2" = "2h", "6" = "6h")
+    )
+    ) +
+  geom_point(
+    aes(color = sig),
+    size = 0.8
+  ) +
+  scale_color_manual(values = c("ns" = "grey30", "up" = "firebrick3", "dn" = "steelblue3")) +
+  theme_bw() +
+  theme(
+    strip.background = element_blank(),
+    panel.grid = element_blank(),
+    aspect.ratio = 0.8,
+    legend.position = "none"
+  ) +
+  labs(
+    x = expression(log[2] * "fold"),
+    y = expression(-log[10] * "FDR")
+  )
+
+# +
+#   
+#   geom_text(
+#     data = summary,
+#     aes(x = -Inf, y = Inf, label = label),
+#     hjust = -0.1,
+#     vjust = 1.1,
+#     cex = 3
+#   )
+
+cleanup_objects()
+```
+
+```{r reconstruct kinetic clusters, fig.height=6, fig.width=3}
+cluster_assignments <- read_rds("../results/figure2/cluster_assignments.rds")
+
+df = ikba_dea %>%
+  filter(treatment == "IL1B") %>%
+  left_join(cluster_assignments, by = "Gene") %>%
+  filter(!is.na(groupName))
+
+ggplot(
+  df,
+  aes(x = time, y = log2fold, color = condition, group = condition)
+) +
+  facet_grid(
+    shape~peak_sig,
+    labeller = labeller(
+      peak_sig = c(
+        "up" = "upreg",
+        "dn" = "downreg"
+      )
+    )
+  ) +
+  stat_summary(
+    geom = "line",
+    fun = "mean"
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "black",
+    lwd = 0.5
+  ) +
+  coord_cartesian(
+    ylim = c(3, -3)
+  ) +
+  scale_color_manual(
+    values = c("grey10", "aquamarine3", "orchid3")
+  ) +
+  scale_x_discrete(
+    expand = expansion(mult = 0.05)
+  ) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1,
+    strip.background = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    x = "time (h)",
+    y = "log2fold"
+  )
+```
+
+```{r reconstruct upregulated clusters only, fig.height=3, fig.width=4}
+cluster_assignments <- read_rds("../results/figure2/cluster_assignments.rds")
+
+df = ikba_dea %>%
+  filter(treatment == "IL1B") %>%
+  left_join(cluster_assignments, by = "Gene") %>%
+  filter(!is.na(groupName)) %>%
+  filter(peak_sig == "up")
+
+ggplot(
+  df,
+  aes(x = time, y = log2fold, color = condition, group = condition)
+) +
+  facet_wrap(
+    ~shape,
+    scale = "free_x"
+    ) +
+  stat_summary(
+    geom = "point",
+    fun = "mean"
+  ) +
+  stat_summary(
+    geom = "line",
+    fun = "mean"
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "black",
+    lwd = 0.5
+  ) +
+  coord_cartesian(
+    ylim = c(3, -3)
+  ) +
+  scale_color_manual(
+    values = c("grey10", "aquamarine3", "orchid3")
+  ) +
+  scale_x_discrete(
+    expand = expansion(mult = 0.15)
+  ) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1,
+    strip.background = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  labs(
+    x = "time (h)",
+    y = "log2fold"
+  )
+```
+
+

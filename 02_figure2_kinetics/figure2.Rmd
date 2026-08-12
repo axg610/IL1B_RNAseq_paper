@@ -153,6 +153,8 @@ ggplot(
     ) +
   geom_hline(yintercept = 0, linetype = "dashed")
 
+saveRDS(cluster_assignments, "../results/figure2/cluster_assignments.rds")
+
 cleanup_objects()
 ```
 
