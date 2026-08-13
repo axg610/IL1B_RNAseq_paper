@@ -1,8 +1,12 @@
 cleanup_objects
+plot_euler
+generic_l2f_heatmap_colors
 tc_dea
 tc_tpm
 goi
 goi2
 ikba_dea
 ikba_tpm
+primary_dea
+primary_tpm
 

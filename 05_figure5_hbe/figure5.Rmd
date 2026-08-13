@@ -1,0 +1,275 @@
+```{r setup}
+library(ComplexHeatmap)
+library(pheatmap)
+library(eulerr)
+
+library(tidyverse)
+```
+
+```{r load helpers}
+source("../R/helpers.R")
+```
+
+```{r load data}
+source("../R/main-data.R")
+```
+
+```{r venns, fig.height=3, fig.width=4}
+lm_reg = primary_dea %>%
+  filter(
+    treatment == "IL1B",
+    FDR <= 0.05,
+    abs(log2fold) >= 1
+  ) %>%
+  group_by(celltype) %>%
+  summarize(Gene = list(unique(Gene)), .groups = "drop") %>%
+  unnest(Gene) %>%
+  mutate(value = 1) %>%
+  pivot_wider(names_from = "celltype", values_from = "value", values_fill = 0) %>%
+  column_to_rownames("Gene")
+
+lm_upreg = primary_dea %>%
+  filter(
+    treatment == "IL1B",
+    FDR <= 0.05,
+    log2fold >= 1
+  ) %>%
+  group_by(celltype) %>%
+  summarize(Gene = list(unique(Gene)), .groups = "drop") %>%
+  unnest(Gene) %>%
+  mutate(value = 1) %>%
+  pivot_wider(names_from = "celltype", values_from = "value", values_fill = 0) %>%
+  column_to_rownames("Gene")
+
+lm_downreg = primary_dea %>%
+  filter(
+    treatment == "IL1B",
+    FDR <= 0.05,
+    log2fold <= -1
+  ) %>%
+  group_by(celltype) %>%
+  summarize(Gene = list(unique(Gene)), .groups = "drop") %>%
+  unnest(Gene) %>%
+  mutate(value = 1) %>%
+  pivot_wider(names_from = "celltype", values_from = "value", values_fill = 0) %>%
+  column_to_rownames("Gene")
+
+plot_euler(lm_reg, plotTitle = "IL1B-regulated")
+plot_euler(lm_upreg, plotTitle =  "IL1B-upregulated")
+plot_euler(lm_downreg, plotTitle =  "IL1B-downregulated")
+```
+
+```{r venn heatmaps, fig.height=9, fig.width=5}
+create_venn_heatmap = function(
+    input_logical_matrix,
+    input_color_scale = c(
+      "steelblue4", "steelblue2" , "white", "firebrick2", "firebrick4"
+      )
+    ){
+  
+  # given a logical matrix declaring group membership (A, L, H, LH, etc),
+  # return a stacked heatmap visualizing each group.
+  
+  # genes belonging to each possible group
+  internal.groups <- input_logical_matrix %>%
+    select(A = A549, L = ALI, H = HBE) %>%
+    mutate(
+      pattern = apply(., 1, function(x) paste(names(.)[x == 1], collapse = ""))
+    ) %>%
+    split(.$pattern) %>%
+    lapply(rownames)
+  
+  # compute matrices for each group
+  internal.mats <- list()
+  
+  for (n in names(internal.groups)) {
+    
+    genelist <- internal.groups[[n]]
+    
+    mat <- primary_tpm %>% 
+      filter(Gene %in% genelist) %>%
+      filter(treatment == "IL1B") %>%
+      mutate(sample = paste(celltype, rep)) %>%
+      select(Gene, sample, log2fold) %>%
+      pivot_wider(values_from = "log2fold", names_from = "sample") %>%
+      column_to_rownames("Gene") %>%
+      as.matrix()
+    
+    mat <- tryCatch({
+      mat[hclust(dist(mat), method = "ward.D2")$order, ]
+    }, error = function(e) {
+      message("Skipping ", n, ": ", e$message)
+      NULL
+    })
+    
+    if (is.null(mat)) next
+    
+    internal.mats[[n]] <- mat
+  }
+  
+  # prepare heatmap helpers
+  colors = generic_l2f_heatmap_colors(
+    do.call(rbind, internal.mats),
+    colorscale = input_color_scale
+  )
+  
+  colsplit = factor(
+    c(
+      rep("A549", 4),
+      rep("ALI", 5),
+      rep("HBE", 5)
+    ),
+    levels = c("A549", "ALI", "HBE")
+  )
+  
+  # compute heatmaps for each matrix
+  
+  internal.heatmaps = list()
+  
+  for(n in names(internal.mats)){
+    
+    hm = Heatmap(
+      internal.mats[[n]],
+      cluster_columns = F,
+      cluster_rows = F,
+      col = colors,
+      show_row_names = F,
+      show_column_names = F,
+      column_split = colsplit,
+      row_title = paste0(n, " (", nrow(internal.mats[[n]]), " genes)"),
+      row_title_rot = 0,
+      border = "black",
+      name = "log2fold"
+    )
+    
+    internal.heatmaps[[n]] = hm
+    
+    rm(n, hm)
+  }
+  
+  suppressWarnings(
+    draw(
+      internal.heatmaps[["A"]] %v%
+        internal.heatmaps[["L"]] %v%
+        internal.heatmaps[["H"]] %v%
+        internal.heatmaps[["AL"]] %v%
+        internal.heatmaps[["AH"]] %v%
+        internal.heatmaps[["LH"]] %v%
+        internal.heatmaps[["ALH"]] 
+    )
+  )
+  
+}
+
+create_venn_heatmap(lm_reg)
+create_venn_heatmap(lm_upreg)
+create_venn_heatmap(lm_downreg)
+```
+
+```{r collapse a549 into one donor, fig.height = 9, fig.width = 5}
+collapsed_tpm = primary_tpm %>%
+  filter(treatment == "IL1B") %>%
+  mutate(rep = if_else(celltype == "A549", "mean", rep)) %>%
+  mutate(name = paste(celltype, rep)) %>%
+  select(Gene, name, rep, celltype, treatment, tpm, log2tpm, fold, log2fold) %>%
+  group_by(Gene, name, rep, celltype) %>%
+  summarize(log2fold = mean(log2fold), .groups = "drop") %>%
+  mutate(meets_threshold = abs(log2fold) >= 1)
+  
+create_collapsed_heatmap <- function(
+    input_tpms = collapsed_tpm,
+    input_genelist,
+    input_color_scale = c(
+      "steelblue4", "steelblue2" , "white", "firebrick2", "firebrick4"
+    )
+){
+  
+  # given a tpms dataframe and genelist, create a heatmap
+  
+  mat <- input_tpms %>%
+    filter(
+      Gene %in% input_genelist
+    ) %>%
+    mutate(name = paste(celltype, rep)) %>%
+    select(Gene, name, log2fold) %>%
+    pivot_wider(names_from = "name", values_from = "log2fold") %>%
+    column_to_rownames("Gene") %>%
+    as.matrix() %>%
+    .[hclust(dist(.), method = "ward.D2")$order, ]
+  
+  colsplits = c(
+    rep("A549", 1),
+    rep("ALI", 5),
+    rep("HBE", 5)
+  )
+  
+  colors = generic_l2f_heatmap_colors(
+    mat,
+    colorscale = input_color_scale
+  )
+  
+  Heatmap(
+    mat,
+    cluster_columns = F,
+    cluster_rows = F,
+    use_raster = T,
+    show_row_names = F,
+    show_column_names = F,
+    column_split = colsplits,
+    border = "black",
+    col = colors,
+    name = "log2fold",
+    width = unit(2.25, "inch"),
+    row_title = paste0(nrow(mat), " genes")
+  )
+  
+}
+
+create_collapsed_heatmap(
+  collapsed_tpm,
+  collapsed_tpm %>% filter(meets_threshold) %>% pull(Gene)
+)
+
+create_collapsed_heatmap(
+  collapsed_tpm,
+  collapsed_tpm %>% filter(meets_threshold, log2fold >= 1) %>% pull(Gene)
+)
+
+create_collapsed_heatmap(
+  collapsed_tpm,
+  collapsed_tpm %>% filter(meets_threshold, log2fold <= -1) %>% pull(Gene)
+)
+
+
+cleanup_objects()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
