@@ -60,6 +60,20 @@ primary_dea = read_tsv("../data/raw/A549vsPrimary_univariateDEA.txt") %>%
     treatment = factor(treatment, levels = c("NS", "IL1B", "GC", "combo"))
   )
 
+hbe_tc_dea = read_tsv("../data/raw/hbe_timecourse_dea.txt") %>%
+  mutate(
+    sig = case_when(
+      log2fold >= 1 & FDR <= 0.05 ~ "up",
+      log2fold <=-1 & FDR <= 0.05 ~ "dn",
+      TRUE ~ "ns"
+    )
+  ) %>%
+  mutate(
+    celltype = factor(celltype, levels = c("A549", "ALI", "HBE")),
+    treatment = factor(treatment, levels = c("NS", "IL1B", "GC", "combo")),
+    time = factor(time, levels = c(2, 6, 24))
+  )
+
 primary_tpm = read_tsv("../data/raw/A549vsPrimary_tpm.txt") %>%
   mutate(
     celltype = factor(celltype, levels = c("A549", "ALI", "HBE")),
