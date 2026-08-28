@@ -17,6 +17,7 @@
 # directories
 data/
 manuscript/
+results/
 
 # file types
 *.pptx

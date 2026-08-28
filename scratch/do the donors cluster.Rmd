@@ -79,7 +79,7 @@ plot_heatmap("GC", "all")
 plot_heatmap("combo", "all")
 ```
 
-```{r}
+```{r fig.height=3, fig.width=4}
 plot_pca <- function(trt, direction = c("all", "up", "dn")) {
   
   direction <- match.arg(direction)
