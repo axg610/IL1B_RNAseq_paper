@@ -1,0 +1,148 @@
+```{r setup}
+library(ComplexHeatmap)
+library(pheatmap)
+library(tidyverse)
+```
+
+```{r load helpers}
+source("../R/helpers.R")
+```
+
+```{r load data}
+source("../R/main-data.R")
+
+demographics = readxl::read_xlsx("../data/donor-demographics.xlsx") %>%
+  column_to_rownames("donor") %>%
+  select(
+    age, 
+    # ethnicity, 
+    # smoker,
+    sex
+    )
+```
+
+```{r fig.height=5, fig.width=5}
+goi = primary_dea %>% filter(sig != "ns") %>% pull(Gene)
+goi_up = primary_dea %>% filter(sig == "up") %>% pull(Gene)
+goi_dn = primary_dea %>% filter(sig == "dn") %>% pull(Gene)
+
+
+plot_heatmap <- function(trt, direction = c("all", "up", "dn")) {
+  
+  direction <- match.arg(direction)
+  
+  genes <- primary_dea %>%
+    filter(
+      treatment == trt,
+      case_when(
+        direction == "all" ~ sig != "ns",
+        direction == "up"  ~ sig == "up",
+        direction == "dn"  ~ sig == "dn"
+      )
+    ) %>%
+    pull(Gene) %>%
+    unique()
+  
+  primary_tpm %>%
+    filter(
+      treatment == trt,
+      celltype == "HBE",
+      Gene %in% genes
+    ) %>%
+    select(Gene, donor = rep, log2fold) %>%
+    pivot_wider(
+      values_from = log2fold,
+      names_from = donor
+    ) %>%
+    column_to_rownames("Gene") %>%
+    as.matrix() %>%
+    pheatmap(
+      cluster_rows = T,
+      cluster_cols = T,
+      show_rownames = F,
+      color = colorRampPalette(
+        c("steelblue4", "steelblue2", "white", "firebrick2", "firebrick4")
+      )(200),
+      breaks = seq(-5, 5, length.out = 200),
+      annotation_col = demographics,
+      annotation_names_col = F,
+      cellwidth = 30,
+      main = paste0("HBEs: ", trt, ", ", direction, " reg genes")
+    )
+}
+
+plot_heatmap("IL1B", "all")
+# plot_heatmap("IL1B", "up")
+# plot_heatmap("IL1B", "dn")
+
+plot_heatmap("GC", "all")
+plot_heatmap("combo", "all")
+```
+
+```{r}
+plot_pca <- function(trt, direction = c("all", "up", "dn")) {
+  
+  direction <- match.arg(direction)
+  
+  genes <- primary_dea %>%
+    filter(
+      treatment == trt,
+      case_when(
+        direction == "all" ~ sig != "ns",
+        direction == "up"  ~ sig == "up",
+        direction == "dn"  ~ sig == "dn"
+      )
+    ) %>%
+    pull(Gene) %>%
+    unique()
+  
+  pca_df <- primary_tpm %>%
+    filter(
+      treatment == trt,
+      celltype == "HBE",
+      Gene %in% genes
+    ) %>%
+    select(Gene, donor = rep, log2fold) %>%
+    pivot_wider(
+      names_from = donor,
+      values_from = log2fold
+    ) %>%
+    column_to_rownames("Gene") %>%
+    as.matrix()
+  
+  # remove genes with missing values
+  pca_df <- pca_df[rowSums(is.na(pca_df)) == 0, ]
+  
+  # PCA: donors are samples, genes are variables
+  pca <- prcomp(t(pca_df))
+  
+  # variance explained
+  pca_var <- pca$sdev^2 / sum(pca$sdev^2)
+  
+  # plotting dataframe
+  pca_plot <- as.data.frame(pca$x[, 1:2]) %>%
+    rownames_to_column("donor") %>%
+    left_join(
+      demographics %>% rownames_to_column("donor"),
+      by = "donor"
+    )
+  
+  ggplot(pca_plot, aes(PC1, PC2)) +
+    geom_point(aes(color = sex), size = 2) +
+    geom_text(aes(label = paste0("age=", age)), vjust = -1, size = 3) +
+    labs(
+      x = paste0("PC1 (", round(pca_var[1] * 100, 1), "%)"),
+      y = paste0("PC2 (", round(pca_var[2] * 100, 1), "%)")
+    ) +
+    theme_bw() +
+    theme(aspect.ratio = 1) +
+    scale_y_continuous(expand = 0.2) +
+    scale_x_continuous(expand = 0.2) +
+    labs(title = paste0("HBEs: ", trt, ", ", direction, " reg genes"))
+}
+
+plot_pca("IL1B", "all")
+plot_pca("GC", "all")
+plot_pca("combo", "all")
+```
+

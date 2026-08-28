@@ -1,0 +1,205 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include = F}
+library(tidyverse)
+source("../R/helpers.R")
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r, include = F, cache = T}
+source("../R/main-data.R")
+```
+
+## Re: Grant - power calculations
+
+---
+
+**Summary:** Using preliminary RNA-seq data from four donors to estimate the variability of IRAK3 expression, we estimated the effect size detectable with 80% power for the proposed sample size of 10 normal and 10 severe asthma donors. Assuming comparable variability in the future cohort, the study would have 80% power to detect approximately 1.2–1.6-fold differences in IRAK3 expression between groups, depending on treatment and cell type.
+
+These estimates are based on preliminary data from only four donors and therefore should be considered approximate; they assume that between-donor variability in the planned cohort is comparable to that observed in the preliminary dataset.
+
+---
+
+#### Example calculation
+
+Pull IRAK3 data for HBEs at NS:
+
+```{r}
+df = primary_tpm %>%
+  filter(Gene == "IRAK3", celltype == "HBE") %>%
+  filter(treatment == "NS")
+
+df
+```
+
+Calculate standard deviation of log2tpm values:
+
+```{r}
+sd_estimate <- sd(df$log2tpm)
+
+sd_estimate
+```
+
+Given a two-sample design, N=10, alpha=0.05, and standard deviation from above, what is the power to detect a 2-fold (delta=1 in log2 space) change between normal and asthmatic?
+
+```{r}
+power.t.test(
+  n = 10,
+  delta = 1,
+  sd = sd_estimate,
+  sig.level = 0.05,
+  type = "two.sample",
+  alternative = "two.sided"
+)
+```
+
+So, 99.9% probability of correctly detecting a doubling of IRAK3 expression between groups. This does not mean that the study has 99.9% power overall.
+
+#### Preliminary power analysis for between-group differences in IRAK3 expression
+
+We can scale out the above calculation to IRAK3 in all primary cell types, across a range of gene expression changes:
+
+```{r}
+power_results <- primary_tpm %>%
+  filter(Gene == "IRAK3", celltype %in% c("ALI", "HBE")) %>%
+
+  group_by(treatment, celltype) %>%
+  summarise(
+    sd_estimate = sd(log2tpm, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+
+  group_by(treatment, celltype) %>%
+  mutate(
+    `power_0.25` = power.t.test(
+      n = 10,
+      delta = 0.25,
+      sd = sd_estimate,
+      sig.level = 0.05,
+      type = "two.sample",
+      alternative = "two.sided"
+    )$power,
+
+    `power_0.50` = power.t.test(
+      n = 10,
+      delta = 0.50,
+      sd = sd_estimate,
+      sig.level = 0.05,
+      type = "two.sample",
+      alternative = "two.sided"
+    )$power,
+
+    `power_1.0` = power.t.test(
+      n = 10,
+      delta = 1.00,
+      sd = sd_estimate,
+      sig.level = 0.05,
+      type = "two.sample",
+      alternative = "two.sided"
+    )$power,
+
+    `power_2.0` = power.t.test(
+      n = 10,
+      delta = 2.00,
+      sd = sd_estimate,
+      sig.level = 0.05,
+      type = "two.sample",
+      alternative = "two.sided"
+    )$power
+  ) %>%
+  ungroup() %>%
+
+  pivot_longer(
+    cols = starts_with("power_"),
+    names_to = "log2delta",
+    names_prefix = "power_",
+    values_to = "power"
+  ) %>%
+
+  mutate(
+    log2delta = as.numeric(log2delta),
+    delta = 2^log2delta
+    )
+```
+
+Based on the variability observed in our preliminary donors, 10 donors per group provides ≥80% power to detect differences in approximately the 1.4–2-fold range (depending on cell type and treatment). Dotted line at power=0.8 for visualization.
+
+```{r fig.height=4, fig.width=4}
+ggplot(
+  power_results,
+  aes(x = log2delta, y = power)
+) +
+  facet_grid(
+    treatment~celltype,
+    ) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.8, linetype = "dashed") +
+  theme_bw() +
+  theme(
+    # aspect.ratio = 0.75,
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 10)
+  ) +
+  labs(
+    x = "Δ expression (log2)",
+    y = "power",
+    title = "Power to detect differences in IRAK3\nexpression with n=10 per group"
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = 0.2),
+    breaks = c(0, 0.25, 0.5, 0.75, 1)
+    )
+```
+
+Explicitly calculating the effect size detectable at 80% power, the proposed sample size of 10 normal and 10 severe asthma donors provides 80% power to detect approximately 1.2–1.6-fold differences in IRAK3 expression, depending on treatment and cell type.
+
+```{r}
+power_08 <- primary_tpm %>%
+  filter(
+    Gene == "IRAK3",
+    celltype %in% c("ALI", "HBE")
+  ) %>%
+  
+  group_by(treatment, celltype) %>%
+  summarise(
+    sd_estimate = sd(log2tpm),
+    .groups = "drop"
+  ) %>%
+  
+  rowwise() %>%
+  mutate(
+    
+    power = 0.8,
+    
+    log2delta = power.t.test(
+      n = 10,
+      power = 0.8,
+      sd = sd_estimate,
+      sig.level = 0.05,
+      type = "two.sample",
+      alternative = "two.sided"
+    )$delta,
+    
+    fold_change = 2^log2delta
+    
+  ) %>%
+  ungroup()
+
+kableExtra::kable(power_08)
+```
+
+```{r}
+cleanup_objects()
+```
+
+
