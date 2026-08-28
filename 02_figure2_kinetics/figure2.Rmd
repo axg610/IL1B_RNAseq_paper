@@ -155,7 +155,7 @@ ggplot(
 
 saveRDS(cluster_assignments, "../results/figure2/cluster_assignments.rds")
 
-cleanup_objects()
+# cleanup_objects()
 ```
 
 ```{r fig 2a, fig.height=6, fig.width=3}
@@ -216,7 +216,13 @@ ggplot(
     y = "log2fold"
   )
 
-cleanup_objects()
+# count genes in each cluster
+cluster_assignments %>%
+  select(Gene, groupName) %>%
+  distinct() %>%
+  count(groupName)
+
+# cleanup_objects()
 ```
 
 ```{r run gene ontology}
@@ -228,9 +234,9 @@ run_enrichGO <- function(
   groupName = "groupName",
   simplify = F
 ){
-  
+
   print(paste("Running GO with", geneOntology, "on group", groupName, "..."))
-  
+
   go = enrichGO(
     gene = geneList,
     universe = geneUniverse,
@@ -241,24 +247,24 @@ run_enrichGO <- function(
     qvalueCutoff  = 0.05,
     readable      = TRUE
   )
-  
+
   if (simplify){
-    
+
     print("Simplifying...")
-    
+
     go <- clusterProfiler::simplify(
       go,
       cutoff = 0.7,
       by = "p.adjust",
       select_fun = min
     )
-    
+
   }
-  
+
   go@result %>%
     mutate(groupName = groupName, .before = 1) %>%
     mutate(Ontology = geneOntology, .before = ID)
-  
+
 }
 
 
@@ -270,11 +276,11 @@ clusters_enrichGO = list()
 
 
 for(gn in unique(cluster_assignments$groupName)){
-  
+
   genelist = cluster_assignments %>%
     filter(groupName == gn) %>%
     pull(Gene)
-    
+
   bp = run_enrichGO(
     genelist,
     all_genes,
@@ -282,7 +288,7 @@ for(gn in unique(cluster_assignments$groupName)){
     gn,
     simplify = T
   )
-  
+
   mf = run_enrichGO(
     genelist,
     all_genes,
@@ -290,29 +296,30 @@ for(gn in unique(cluster_assignments$groupName)){
     gn,
     simplify = T
   )
-  
+
   df = rbind(bp, mf)
-  
+
   clusters_enrichGO[[gn]] = df
 }
 
 saveRDS(clusters_enrichGO, "../results/figure2/clusters_enrichGO.rds")
 
-cleanup_objects()
+# cleanup_objects()
 ```
 
-```{r fig ???, fig.height=3.5, fig.width=5}
+```{r fig 2b and fig 2c, fig.height=2, fig.width=5}
 clusters_enrichGO = read_rds("../results/figure2/clusters_enrichGO.rds")
 
 # function to prepare dataframes
 prep_go <- function(
     df,
-    countThreshold = 15
+    countThreshold = 15,
+    nTerms = 10
     ) {
   
   df %>%
-    filter(Count >= countThreshold) %>%
-    slice_max(FoldEnrichment, n = 10, with_ties = FALSE) %>%
+    filter(Count >= countThreshold, p.adjust <= 0.05) %>%
+    slice_max(FoldEnrichment, n = nTerms, with_ties = FALSE) %>%
     mutate(
       Description = str_wrap(str_trunc(Description, 60), 35),
       Description = factor(Description, levels = rev(Description))
@@ -359,7 +366,7 @@ base_plot <- function(
     ) +
     theme_bw() +
     theme(
-      aspect.ratio = 3,
+      aspect.ratio = 2,
       panel.grid.minor = element_blank()
     )
 }
@@ -370,28 +377,219 @@ fillLimits = c(0, 40)
 sizeLimits = c(1, 60)
 
 base_plot(
-  prep_go(clusters_enrichGO[["up_early"]]), 
-  "up, early", 
+  prep_go(clusters_enrichGO[["up_immediate"]], nTerms = 5, countThreshold = 5), 
+  "up_immediate", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
   
   )
 
 base_plot(
-  prep_go(clusters_enrichGO[["up_mid"]]), 
-  "up, mid", 
+  prep_go(clusters_enrichGO[["up_early"]], nTerms = 5), 
+  "up_early", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["up_mid"]], nTerms = 5), 
+  "up_mid", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
   )
 
 base_plot(
-  prep_go(clusters_enrichGO[["dn_late"]], countThreshold = 5), 
-  "down, late", 
+  prep_go(clusters_enrichGO[["up_mid-late"]], nTerms = 5), 
+  "up_mid-late", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["up_late"]], nTerms = 5, countThreshold = 10), 
+  "up_late", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["up_sustained"]], nTerms = 5), 
+  "up_sustained", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+# ===========
+
+base_plot(
+  prep_go(clusters_enrichGO[["dn_early"]], countThreshold = 5, nTerms = 5), 
+  "dn_early", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["dn_mid"]], countThreshold = 15, nTerms = 5), 
+  "dn_mid", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["dn_mid-late"]], countThreshold = 15, nTerms = 5), 
+  "dn_mid-late", 
+  fill_limits = fillLimits,
+  size_limits = sizeLimits
+  )
+
+base_plot(
+  prep_go(clusters_enrichGO[["dn_late"]], countThreshold = 5, nTerms = 5), 
+  "down_late", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
   )
 
 ```
+
+```{r fig ???}
+# upset plot of shared themes?
+
+clusters_enrichGO = read_rds("../results/figure2/clusters_enrichGO.rds")
+
+df = bind_rows(clusters_enrichGO) %>%
+  filter(str_detect(groupName, "up_|dn_"), Ontology %in% c("BP", "MF")) %>%
+  select(groupName, Description)
+  
+  
+
+upset_df <- df %>%
+  mutate(value = TRUE) %>%
+  pivot_wider(
+    names_from = groupName,
+    values_from = value,
+    values_fill = FALSE
+  )
+
+ComplexUpset::upset(
+  upset_df,
+  intersect = unique(df$groupName),
+  name = "GO terms"
+)
+
+
+cleanup_objects()
+```
+
+```{r find functional clusters}
+library(rrvgo)
+
+clusters_enrichGO = read_rds("../results/figure2/clusters_enrichGO.rds")
+
+go_bp <- bind_rows(clusters_enrichGO) %>%
+  filter(Ontology == "BP", p.adjust < 0.05) %>%
+  distinct(ID, .keep_all = TRUE)
+
+go_ids <- go_bp$ID
+
+# sim_matrix <- calculateSimMatrix(
+#   go_ids,
+#   orgdb = "org.Hs.eg.db",
+#   ont = "BP",
+#   method = "Rel"
+# )
+
+saveRDS(sim_matrix, "../results/figure2/sim_matrix.rds")
+sim_matrix = readRDS("../results/figure2/sim_matrix.rds")
+
+clusters <- reduceSimMatrix(
+  sim_matrix,
+  orgdb = "org.Hs.eg.db",
+  scores = setNames(-log10(go_bp$p.adjust), go_bp$ID),
+  threshold = 0.7
+)
+
+go_clusters <- go_bp %>%
+  left_join(
+    clusters %>%
+      select(go, cluster, parent, parentTerm),
+    by = c("ID" = "go")
+  )
+
+cluster_summary <- go_clusters %>%
+  group_by(cluster, parent, parentTerm) %>%
+  summarise(
+    n_terms = n(),
+    groups = paste(unique(groupName), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_terms))
+
+heatmap_df <- go_clusters %>%
+  filter(str_detect(groupName, "up_")) %>%
+  filter(groupName != "up_sustained") %>%
+  group_by(cluster, parent, parentTerm, groupName) %>%
+  summarise(
+    score = -log10(min(p.adjust)),
+    .groups = "drop"
+  )
+
+heatmap_mat <- heatmap_df %>%
+  select(parentTerm, groupName, score) %>%
+  pivot_wider(
+    names_from = groupName,
+    values_from = score,
+    values_fill = 0
+  )
+
+group_order <- c(
+  "up_immediate",
+  "up_early",
+  "up_mid",
+  "up_mid-late",
+  "up_late"
+  
+  # ,
+  # "up_sustained"
+  
+  # ,
+  # "dn_early",
+  # "dn_mid",
+  # "dn_mid-late",
+  # "dn_late"
+  
+  
+)
+
+heatmap_mat <- heatmap_mat %>%
+  select(parentTerm, all_of(group_order)) %>%
+  na.omit()
+
+mat <- heatmap_mat %>%
+  column_to_rownames("parentTerm") %>%
+  as.matrix()
+
+pheatmap(
+  mat,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  scale = "none"
+)
+
+mat_clip <- pmin(mat, 5)
+
+pheatmap(
+  mat_clip,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  scale = "none"
+)
+
+cleanup_objects()
+
+# i think it makes more sense to do this with GO on each time ??? maybe move to fig 1.
+```
+
 
 ```{r find example genes}
 cluster_candidates = tibble()
