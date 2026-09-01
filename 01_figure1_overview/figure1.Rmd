@@ -79,7 +79,7 @@ ggplot(df, aes(x = peak, y = n)) +
 cleanup_objects()
 ```
 
-
+PCA and Euclidean distances
 
 ```{r fig 1c, fig.height=2.5, fig.width=3}
 
@@ -143,7 +143,7 @@ ggplot(pca_distance, aes(x = time, y = dist)) +
 cleanup_objects()
 ```
 
-
+DEG heatmap
 
 ```{r fig 1d, fig.height=4, fig.width=4, dpi=600}
 #related to il1b-timecourse/modules/fig-il1b-heatmap.R
@@ -199,6 +199,7 @@ Heatmap(
 )
 ```
 
+GSEA on all heatmap genes
 
 ```{r fig 1e}
 # format hallmark for clusterProfiler
@@ -233,8 +234,8 @@ ranks = tc_dea %>%
 #     ) %>%
 #   arrange(NES) %>%
 #   mutate(Description = factor(Description, levels = unique(Description)))
-
-write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
+# 
+# write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
 gsea_df = read_tsv("../results/figure1/gsea_df.txt")
   
 ggplot(
@@ -258,6 +259,144 @@ barplot(ranks)
 cleanup_objects()
 ```
 
+
+GO on each timepoint
+
+```{r fig 1f}
+
+# ========================================
+#               run GO
+# ========================================
+
+
+# tc_go_bp = data.frame()
+# 
+# 
+# for(t in c(1, 2, 6, 12, 24)){
+#   
+#   genelist = tc_dea %>%
+#     filter(time == t, sig != "ns") %>%
+#     pull(Gene)
+#   
+#   print(paste0("Running ", t, "h..."))
+#   
+#   go_bp <- enrichGO(
+#     gene = genelist,
+#     universe = unique(tc_dea$Gene),
+#     OrgDb = org.Hs.eg.db::org.Hs.eg.db,
+#     keyType = "SYMBOL",
+#     ont = "BP",
+#     pAdjustMethod = "BH",
+#     pvalueCutoff = 0.05,
+#     readable = TRUE
+#   )
+#   
+#   print(paste0("Simplifying ", t, "h..."))
+#   
+#   go_bp_simp = clusterProfiler::simplify(go_bp)
+#   
+#   df = go_bp_simp@result %>%
+#     mutate(treatment = "IL1B", time = t, .before = 1)
+#   
+#   tc_go_bp = rbind(tc_go_bp, df)
+# }
+# 
+# saveRDS(tc_go_bp, "../results/figure1/tc_go_bp.rds")
+tc_go_bp = readRDS("../results/figure1/tc_go_bp.rds")
+
+# ========================================
+#             term selection
+# ========================================
+
+# strip out redundant "x" vs "regulation of x" terms
+df_filtered <- tc_go_bp %>%
+  mutate(
+    Description_clean = str_remove(Description, "^regulation of "),
+    GeneRatio = Count / as.numeric(sub(".*/", "", GeneRatio))
+  ) %>%
+  group_by(time, Description_clean) %>%
+  slice_min(p.adjust, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  filter(GeneRatio >= 0.05)
+
+# sequentially select terms; earlier timepoints get first dibs
+claimed <- character()
+df_list <- list()
+
+for (t in c(1, 2, 6, 12, 24)) {
+  
+  tmp <- df_filtered %>%
+    filter(
+      time == t,
+      !Description_clean %in% claimed
+    ) %>%
+    arrange(desc(FoldEnrichment)) %>%
+    slice_head(n = 5)
+  
+  df_list[[as.character(t)]] <- tmp
+  
+  claimed <- c(claimed, tmp$Description_clean)
+}
+
+# assemble final dataframe
+df_final <- bind_rows(df_list) %>%
+  mutate(
+    Description = factor(
+      Description_clean,
+      levels = rev(unique(Description_clean))
+    )
+  )
+
+
+# default: only show the timepoint where each term was claimed
+df_plot <- df_final
+
+
+# ========================================
+#           join in all appearances
+# ========================================
+
+df_plot <- df_filtered %>%
+  filter(Description_clean %in% df_final$Description_clean) %>%
+  left_join(
+    df_final %>%
+      select(Description_clean, claimed_time = time) %>%
+      distinct(),
+    by = "Description_clean"
+  ) %>%
+  mutate(
+    claimed = time == claimed_time,
+    Description = factor(
+      Description_clean,
+      levels = levels(df_final$Description)
+    )
+  )
+
+
+# ========================================
+#             plotting
+# ========================================
+
+ggplot(df_plot, aes(
+  x = factor(time),
+  y = Description,
+  size = RichFactor,
+  color = -log10(p.adjust),
+  alpha = claimed
+)) +
+  geom_point(stroke = NA) +
+  scale_alpha_manual(
+    values = c(0.3, 1),
+    guide = "none"
+  ) +
+  theme(
+    aspect.ratio = 3
+  ) +
+  scale_color_gradient(low = "steelblue2", high = "firebrick2")
+
+
+# cleanup_objects()
+```
 
 
 
