@@ -1,0 +1,6 @@
+```{r}
+cleanup_objects()
+
+source("../R/chipseq-data.R")
+```
+
