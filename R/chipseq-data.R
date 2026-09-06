@@ -143,12 +143,12 @@ if(!file.exists("../data/peaks/dba.rds")){
     keep.extra.columns = TRUE
   )
   
-  # ===== find genes roughly within 30 kb =====
+  # ===== find genes roughly within 100 kb =====
   
   hits = findOverlaps(
     peaks_ranges,
     gene_ranges,
-    maxgap = 30000,
+    maxgap = 100000,
     ignore.strand = TRUE
   )
   
@@ -174,7 +174,7 @@ if(!file.exists("../data/peaks/dba.rds")){
     distance_to_TSS = distances
   ) %>%
     filter(grepl("^[A-Z0-9]+$", Gene)) %>%
-    filter(distance_to_TSS <= 30000)
+    filter(distance_to_TSS <= 100000)
   
   peak_gene_summary = peak_gene_map %>%
     group_by(peak_id) %>%
