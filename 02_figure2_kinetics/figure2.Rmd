@@ -155,7 +155,9 @@ ggplot(
 
 saveRDS(cluster_assignments, "../results/figure2/cluster_assignments.rds")
 
-# cleanup_objects()
+writexl::write_xlsx(cluster_assignments, "../results/figure2/cluster_assignments.xlsx")
+
+cleanup_objects()
 ```
 
 ```{r fig 2a, fig.height=6, fig.width=3}
