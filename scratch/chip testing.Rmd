@@ -1,6 +1,188 @@
-```{r}
-cleanup_objects()
+```{r setup, include=F}
 
+
+library(GenomicRanges)
+library(EnsDb.Hsapiens.v86)
+
+library(tidyverse)
+
+
+source("../R/helpers.R")
+source("../R/main-data.R")
 source("../R/chipseq-data.R")
+
+cleanup_objects()
 ```
+
+```{r load helpers}
+
+```
+
+```{r fig.width=6, fig.height=4}
+cluster_assignments = readRDS("../results/figure2/cluster_assignments.rds")
+
+peak_times = tc_dea %>%
+  filter(treatment == "IL1B") %>%
+  select(Gene, peak) %>%
+  distinct()
+
+chip_locations = peaks_to_genes[["long_data"]] %>%
+  filter(str_detect(peak_id, "RELApeak"))
+
+df = left_join(
+  chip_locations,
+  cluster_assignments,
+  by = "Gene"
+) %>%
+  left_join(
+    peak_times,
+    by = "Gene"
+    ) %>%
+  filter(!is.na(cluster))
+
+ggplot(
+  df,
+  aes(x = peak, y = distance_to_TSS)
+) +
+  facet_wrap(~peak_sig) +
+  geom_violin(
+    scale = "area"
+  ) +
+  geom_boxplot(
+    width = 0.2
+  ) +
+  # geom_jitter(
+  #   alpha = 0.2,
+  #   width = 0.2,
+  #   shape = 16,
+  #   stroke = NA,
+  #   size = 0.3
+  # ) +
+  theme(
+    aspect.ratio = 0.5
+  )
+
+ggplot(
+  df,
+  aes(x = shape, y = distance_to_TSS)
+) +
+  facet_wrap(~peak_sig) +
+  geom_violin(
+    scale = "area"
+  ) +
+  geom_boxplot(
+    width = 0.2
+  ) +
+  # geom_jitter(
+  #   alpha = 0.2,
+  #   width = 0.2,
+  #   shape = 16,
+  #   stroke = NA,
+  #   size = 0.3
+  # ) +
+  theme(
+    aspect.ratio = 0.5
+  )
+
+cleanup_objects()
+```
+
+```{r fig.height=4, fig.width=3}
+chip_locations = peaks_to_genes[["long_data"]] %>%
+  filter(str_detect(peak_id, "RELApeak"))
+
+chip_counts = peaks_to_genes[["long_data"]] %>%
+  filter(str_detect(peak_id, "RELApeak")) %>%
+  select(Gene) %>%
+  count(Gene)
+
+goi = ikba_dea %>%
+  filter(condition == "naive", treatment == "IL1B", sig == "up") %>%
+  pull(Gene) %>%
+  unique()
+
+df = ikba_dea %>%
+  filter(treatment == "IL1B", Gene %in% goi) %>%
+  group_by(Gene, time) %>%
+  mutate(
+    fraction_naive = log2fold / (log2fold[condition == "naive"] + 0.1)
+  ) %>%
+  ungroup()
+
+inhibited_genes = df %>%
+  filter(condition == "Ad-IKBA", time == 6) %>%
+  filter(fraction_naive <= 0.25) %>%
+  pull(Gene)
+
+set.seed(777)
+random_genes = ikba_dea %>%
+  pull(Gene) %>%
+  unique() %>%
+  sample(810)
+
+df = rbind(
+  
+  chip_locations %>%
+    filter(Gene %in% inhibited_genes) %>%
+    mutate(group = "NFkappaB-dependent"),
+  
+  chip_locations %>%
+    filter(Gene %in% random_genes) %>%
+    mutate(group = "random")
+)
+
+ggplot(
+  df, 
+  aes(x = group, y = distance_to_TSS)
+) +
+  geom_violin() +
+  geom_boxplot(outliers = F, width = 0.2) +
+  labs(x = NULL, y = "peak distance from TSS")
+
+df = rbind(
+  
+  chip_counts %>%
+    filter(Gene %in% inhibited_genes) %>%
+    mutate(group = "NFkappaB-dependent"),
+  
+  chip_counts %>%
+    filter(Gene %in% random_genes) %>%
+    mutate(group = "random")
+)
+
+ggplot(
+  df, 
+  aes(x = group, y = n)
+) +
+  geom_violin() +
+  geom_boxplot(outliers = F, width = 0.2) +
+  labs(x = NULL, y = "number of peaks within 30kb of TSS")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
