@@ -1,6 +1,6 @@
-library(GenomicRanges)
-library(EnsDb.Hsapiens.v86)
-library(tidyverse)
+# library(GenomicRanges)
+# library(EnsDb.Hsapiens.v86)
+# library(tidyverse)
 
 if(!file.exists("../data/peaks/dba.rds")){
   
@@ -191,7 +191,6 @@ if(!file.exists("../data/peaks/dba.rds")){
   saveRDS(dba, "../data/peaks/dba.rds")
   saveRDS(peaks_to_genes, "../data/peaks/peaks_to_genes.rds")
   
-  cleanup_objects()
   
 } else{
   
