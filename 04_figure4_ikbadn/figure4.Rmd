@@ -185,4 +185,115 @@ ggplot(
   )
 ```
 
+```{r fig ???, fig.height = 7, fig.width = 5}
+
+# ===== setup peak times, matrix, colors, and colsplits =====
+
+peak_times = ikba_dea %>%
+  filter(treatment == "IL1B", condition == "naive", sig != "ns") %>%
+  select(Gene, peak) %>%
+  distinct()
+
+mat = ikba_tpm %>%
+  filter(treatment == "IL1B") %>%
+  arrange(condition, time, rep) %>%
+  unite("sample", condition, time, rep, sep = "_") %>%
+  select(Gene, sample, log2fold) %>%
+  pivot_wider(names_from = "sample", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+colors = generic_l2f_heatmap_colors(mat)
+
+colsplits = factor(
+  c(
+    rep("naive 1h", 4),
+    rep("naive 2h", 4),
+    rep("naive 6h", 4),
+    rep("GFP 1h", 4),
+    rep("GFP 2h", 4),
+    rep("GFP 6h", 4),
+    rep("IKBA 1h", 4),
+    rep("IKBA 2h", 4),
+    rep("IKBA 6h", 4)
+  ),
+  levels = c(
+    "naive 1h", "naive 2h", "naive 6h",
+    "GFP 1h", "GFP 2h", "GFP 6h",
+    "IKBA 1h", "IKBA 2h", "IKBA 6h"
+  )
+)
+
+# ===== generate heatmaps =====
+
+heatmaps = list()
+
+for(t in c(1, 2, 6)){
+  
+  goi = peak_times %>%
+    filter(peak == t) %>%
+    pull(Gene)
+  
+  nm = paste0("peak=", t, "h")
+  
+  
+  mat_subset = mat[goi, ]
+  
+  hm = Heatmap(
+    mat_subset,
+    
+    col = colors,
+    column_split = colsplits,
+    row_title = paste0(nm, "\n", length(goi)),
+    
+    cluster_rows = T,
+    cluster_columns = F,
+    clustering_method_columns = "ward.D2",
+    
+    show_row_names = F,
+    show_column_names = F,
+    row_title_rot = 0,
+    column_title_rot = 90,
+    show_row_dend = F,
+    border = "black",
+    gap = unit(1, "mm")
+  )
+  
+  heatmaps[[nm]] <- hm
+  
+  rm(goi, nm, mat_subset, hm, t)
+  
+}
+
+# ===== plot heatmaps =====
+
+draw(
+  heatmaps[["peak=1h"]] %v%
+    heatmaps[["peak=2h"]] %v%
+    heatmaps[["peak=6h"]]
+)
+
+cleanup_objects()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
