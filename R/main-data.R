@@ -29,11 +29,11 @@ ikba_dea <- read_tsv("../data/raw/a549-ikbadn-ib-timecourse_DEA.txt") %>%
     log2fold >=  1 & FDR <= 0.05 ~ "up",
     TRUE ~ "ns"
   )) %>%
-  # group_by(Gene, treatment, condition) %>%
-  # mutate(
-  #   peak = time[which.max(abs(log2fold))],
-  #   peak_sig = sig[which(time == peak)]) %>%
-  # ungroup() %>%
+  group_by(Gene, treatment, condition) %>%
+  mutate(
+    peak = time[which.max(abs(log2fold))],
+    peak_sig = sig[which(time == peak)]) %>%
+  ungroup() %>%
   mutate(
     treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "IB")),
     condition = factor(condition, levels = c("naive", "Ad-GFP", "Ad-IKBA")),
