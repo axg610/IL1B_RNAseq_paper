@@ -47,10 +47,10 @@ ikba_tpm <- read_tsv("../data/raw/a549-ikbadn-ib-timecourse_tpm.txt") %>%
     time = factor(time, levels = c(1, 2, 6))
   )
 
-# primary_dea = read_tsv("../data/raw/A549vsPrimary_univariateDEA.txt") %>%
-primary_dea = read_tsv("../data/deseq2/deseq2-A549vsPrimary-dea.txt") %>%
-  filter(grepl("^[A-Za-z0-9]+$", Gene)) %>%
-  filter(!is.na(Gene)) %>%
+primary_dea = read_tsv("../data/raw/A549vsPrimary_univariateDEA.txt") %>%
+# primary_dea = read_tsv("../data/deseq2/deseq2-A549vsPrimary-dea.txt") %>%
+  # filter(grepl("^[A-Za-z0-9]+$", Gene)) %>%
+  # filter(!is.na(Gene)) %>%
   mutate(
     sig = case_when(
       log2fold >= 1 & FDR <= 0.05 ~ "up",
