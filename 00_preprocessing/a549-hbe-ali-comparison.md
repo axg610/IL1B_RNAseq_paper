@@ -197,7 +197,7 @@ scp alex.gao1@arc.ucalgary.ca:/work/newton_lab/ag_analysis/a549-hbe-ali-comparis
 ```
 
 
-### modelling and DEA work
+### sleuth modelling and DEA work
 ```bash
 mkdir -p sleuth
 R
@@ -602,3 +602,229 @@ lrt2_results = sleuth_results(so_il1b_6h, "reduced:full", test_type = "lrt") %>%
 
 write_tsv(lrt2_results, "sleuth/A549vsPrimary_lrt2_IL1B_6h.txt")
 ```
+
+### DESeq2 modelling and DEA work
+
+It is worth trying DESeq2 because:
+
+1. It has native RLE-style normalization, so automatically estimates size factors to account for differences in sequencing batch. Conceptually similar to TMM approach used by edgeR.
+
+2. It supports arbitrary contrasts (e.g., "treatment_IL1B_vs_NS" + "celltypeHBE.treatmentIL1B", which says take the IL1B vs NS effect in control-leveled A549 cells and adjust using the effect of HBE on IL1B). In practice this means we can model all three cell types together instead of creating three different sleuth objects that each run their own Wald test.
+
+```bash
+mkdir -p deseq2
+mkdir -p deseq2/objects
+R
+```
+
+```r setup
+.libPaths("/home/alex.gao1/R")
+setwd("/work/newton_lab/ag_analysis/a549-hbe-ali-comparison")
+
+library(tximport)
+library(DESeq2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(tibble)
+```
+
+```r prep universal inputs
+t2g <- read_tsv(
+    "/work/newton_lab/ag_analysis/ref_seq/Homo_sapiens.GRCh38.p14.cdna.all_mart_export.txt"
+    ) %>%
+    select(
+        TXNAME = `Transcript stable ID`,
+        GENEID = `Gene stable ID`,
+        GENE = `Gene name`
+    ) %>%
+    filter(!is.na(TXNAME), !is.na(GENEID)) %>%
+    distinct(TXNAME, .keep_all = TRUE)
+
+s2c <- rbind(
+        read_tsv("meta_a549_il1b_bud.txt"),
+        read_tsv("meta_ali_il1b_bud.txt"),
+        read_tsv("meta_hbe_il1b_dex.txt")) %>%
+    mutate(
+        treatment = if_else(treatment == "Dex" | treatment == "Bud", "GC", treatment),
+        treatment = if_else(treatment == "I+D" | treatment == "I+B", "combo", treatment)) %>%
+    mutate(
+        treatment = factor(treatment, levels = c("NS", "IL1B", "GC", "combo")),
+        celltype = factor(celltype, levels = c("A549", "ALI", "HBE"))
+     ) %>%
+    mutate(
+        donor = if_else(
+            celltype == "A549",
+            "A549donor",
+            rep
+        ),
+        donor = factor(donor),
+        .before = celltype
+    ) %>%
+    select(sample, rep, donor, celltype, treatment, time, path = kallisto_path)
+```
+
+```r model all cell types together at 6h
+
+# ===== prep files and mappings =====
+
+s2c_6h_il1b = s2c %>%
+    filter(time == 6, treatment %in% c("NS", "IL1B"))
+
+files <- file.path(s2c_6h_il1b$path, "abundance.h5")  #append the actual file to folder path
+names(files) = s2c_6h_il1b$sample
+
+tx2gene = t2g %>%
+    select(TXNAME, GENEID)
+
+# ===== import kallisto abundance files =====
+
+txi = tximport(
+    files,
+    type = "kallisto",
+    tx2gene = tx2gene,
+    ignoreTxVersion = TRUE
+)
+
+# ===== prep deseq object =====
+
+coldata = s2c_6h_il1b %>% select(sample, donor, celltype, treatment) %>% as.data.frame()
+rownames(coldata) <- coldata$sample
+
+# # we can't explicitly model donor because A549s come from an entirely different person.
+# # so, we can't tell if a difference is driven by A549 celltype, or by the fact that A549
+# #        is a different person than other donors.
+
+# dds <- DESeqDataSetFromTximport(
+#     txi = txi,
+#     colData = coldata,
+#     design = ~ donor + celltype * treatment
+# )
+
+dds = DESeqDataSetFromTximport(
+    txi = txi,
+    colData = coldata,
+    design = ~ celltype * treatment
+)
+
+# ===== filter low-count genes =====
+
+# same filter as sleuth. just ported to deseq2.
+keep <- rowSums(counts(dds) >= 5) / ncol(dds) >= 0.2
+
+dds <- dds[keep, ]
+
+# ===== run deseq ======
+
+dds <- DESeq(dds)
+
+# ===== pull normalization factors ======
+
+nf = normalizationFactors(dds) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    left_join(
+        t2g %>% select(GENEID, GENE) %>% distinct(), 
+        by = "GENEID") %>%
+    select(Gene = GENE, GENEID, everything()) %>%
+    arrange(Gene)
+
+write_tsv(nf, "deseq2/a5-ali-hbe-normalizationFactors.txt")
+
+# ===== pull wald test results =====
+
+res_A549 <- results(
+    dds,
+    name = "treatment_IL1B_vs_NS"
+) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    mutate(celltype = "A549")
+
+res_ALI <- results(
+    dds,
+    contrast = list(
+        c("treatment_IL1B_vs_NS", "celltypeALI.treatmentIL1B")
+    )
+) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    mutate(celltype = "ALI")
+
+res_HBE <- results(
+    dds,
+    contrast = list(
+        c("treatment_IL1B_vs_NS", "celltypeHBE.treatmentIL1B")
+    )
+) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    mutate(celltype = "HBE")
+
+dea = rbind(
+    res_A549,
+    res_ALI,
+    res_HBE
+) %>%
+    as_tibble() %>%
+    left_join(
+        t2g %>% select(GENEID, GENE) %>% distinct(),
+        by = "GENEID"
+    ) %>%
+    mutate(time = 6, treatment = "IL1B") %>%
+    select(Gene = GENE, celltype, treatment, time, log2fold = log2FoldChange, FDR = padj) %>%
+    arrange(Gene, celltype) %>%
+    mutate(
+        log2fold = if_else(is.na(log2fold), 0, log2fold),
+        FDR = if_else(is.na(FDR), 1, FDR)
+    ) %>%
+    distinct()
+
+write_tsv(dea, "deseq2/deseq2-A549vsPrimary-dea.txt")
+
+# ===== pull interaction test results =====
+
+res_ALI_vs_A549_response <- results(
+    dds,
+    name = "celltypeALI.treatmentIL1B"
+) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    select(GENEID, ALI_diff = log2FoldChange, ALI_FDR = padj)
+
+res_HBE_vs_A549_response <- results(
+    dds,
+    name = "celltypeHBE.treatmentIL1B"
+) %>%
+    as.data.frame() %>%
+    rownames_to_column("GENEID") %>%
+    select(GENEID, log2FoldChange, padj) %>%
+    select(GENEID, HBE_diff = log2FoldChange, HBE_FDR = padj)
+
+interaction = left_join(
+    res_ALI_vs_A549_response,
+    res_HBE_vs_A549_response,
+    by = "GENEID"
+) %>%
+    as_tibble() %>%
+    left_join(
+        t2g %>% select(GENEID, GENE) %>% distinct(),
+        by = "GENEID"
+    ) %>%
+    rename(Gene = GENE) %>%
+    arrange(Gene) %>%
+    select(Gene, contains("ALI"), contains("HBE")) %>%
+    distinct()
+
+write_tsv(interaction, "deseq2/deseq2-A549vsPrimary-interaction.txt")
+
+```
+
+
+
+
+
+
+
+
