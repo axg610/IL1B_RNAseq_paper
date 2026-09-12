@@ -524,7 +524,16 @@ ggplot(
 ```{r peak times of each cluster, fig.height=6, fig.width=3}
 
 # most of the clusters correspond to peak-time groups, but mid-late and 
-# sustained capture trajectory properties that peak time alone misses
+# sustained capture trajectory properties that peak time alone misses...
+
+# we see "dominant-peak" clusters (e.g., immediate, early, mid, late), where
+# the peak aligns nicely with the kinetic.
+
+# we also see "distributed-peak" clusters (e.g., mid-late, sustained), where
+# peak times are mixed
+
+# dominant-peak clusters can take viper right at the peak time, but distributed-
+# peak clusters should retain kinetic and take viper at all timepoints
 
 df = cluster_assignments %>%
   group_by(peak_sig, shape) %>%
@@ -578,8 +587,88 @@ ggplot(
   coord_polar(theta = "y") +
   theme_void()
 
+cleanup_objects()
 ```
 
+```{r run viper/aREA on clusters, fig.height=5, fig.width=3}
+
+# get transcription factor regulon info
+source("../R/get-dorothea-regulons.R")
+
+# for dominant-peak clusters, we can simply take peak gene expression
+# and ask which transcription factor are enriched.
+# this can be done with aREA (without wrapping in VIPER, which handles
+# between-sample comparisons)
+
+# conceptually similar to rigging up a custom GSEA geneset, but aREA
+# can make use of doRothEA's confidence and directional info.
+
+cluster_to_peak <- c(
+  up_immediate = 1,
+  up_early = 2,
+  up_mid = 6,
+  up_late = 24
+)
+
+aREA_results <- list()
+
+for (g in names(cluster_to_peak)) {
+  
+  t <- cluster_to_peak[g]
+  
+  goi <- cluster_assignments %>%
+    filter(groupName == g) %>%
+    pull(Gene)
+  
+  mat <- tc_dea %>%
+    filter(
+      treatment == "IL1B",
+      time == t,
+      Gene %in% goi
+    ) %>%
+    select(Gene, log2fold) %>%
+    column_to_rownames("Gene") %>%
+    as.matrix()
+  
+  aREA_results[[g]] <- viper::aREA(
+    mat[, 1],
+    dorothea_regulons[["viper_input"]],
+    minsize = 10
+  )$nes %>%
+    as.data.frame() %>%
+    rename(NES = V1) %>%
+    rownames_to_column("tf") %>%
+    mutate(
+      groupName = g,
+      time = t,
+      .before = 1
+    )
+}
+
+aREA_results <- bind_rows(aREA_results) %>%
+  mutate(
+    groupName = factor(groupName, levels = unique(groupName)),
+    time = factor(time, levels = unique(time))
+  )
+
+ggplot(aREA_results, aes(x = NES, y = reorder(tf, NES))) +
+  facet_wrap(
+    ~ groupName, 
+    scales = "free_y",
+    ncol = 1
+    ) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_col() +
+  labs(
+    x = "aREA NES",
+    y = "TF"
+  )
+
+
+
+# todo: for distributed-peak genes, run full VIPER on all times and
+# look for interesting patterns within peak subpopulations.
+```
 
 
 
