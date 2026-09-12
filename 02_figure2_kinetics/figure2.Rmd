@@ -131,7 +131,14 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
       )
     )
   ) %>%
-  mutate(groupName = paste0(peak_sig, "_", shape))
+  mutate(groupName = paste0(peak_sig, "_", shape)) %>%
+  left_join(
+    tc_dea %>%
+      filter(treatment == "IL1B") %>%
+      select(Gene, peak) %>%
+      distinct(),
+    by = "Gene"
+  )
 
 # check clusters
 df = tc_dea %>%
@@ -224,87 +231,88 @@ cluster_assignments %>%
   distinct() %>%
   count(groupName)
 
-# cleanup_objects()
+cleanup_objects()
 ```
 
 ```{r run gene ontology}
-# enrichGO function
-run_enrichGO <- function(
-  geneList,
-  geneUniverse = unique(tc_tpm$Gene),
-  geneOntology = "BP",
-  groupName = "groupName",
-  simplify = F
-){
-
-  print(paste("Running GO with", geneOntology, "on group", groupName, "..."))
-
-  go = enrichGO(
-    gene = geneList,
-    universe = geneUniverse,
-    OrgDb = org.Hs.eg.db,
-    keyType       = "SYMBOL",
-    ont           = geneOntology,
-    pAdjustMethod = "BH",
-    qvalueCutoff  = 0.05,
-    readable      = TRUE
-  )
-
-  if (simplify){
-
-    print("Simplifying...")
-
-    go <- clusterProfiler::simplify(
-      go,
-      cutoff = 0.7,
-      by = "p.adjust",
-      select_fun = min
-    )
-
-  }
-
-  go@result %>%
-    mutate(groupName = groupName, .before = 1) %>%
-    mutate(Ontology = geneOntology, .before = ID)
-
-}
-
-
-# run enrichGO over all clusters
-
-all_genes = unique(tc_tpm$Gene)
-
-clusters_enrichGO = list()
-
-
-for(gn in unique(cluster_assignments$groupName)){
-
-  genelist = cluster_assignments %>%
-    filter(groupName == gn) %>%
-    pull(Gene)
-
-  bp = run_enrichGO(
-    genelist,
-    all_genes,
-    "BP",
-    gn,
-    simplify = T
-  )
-
-  mf = run_enrichGO(
-    genelist,
-    all_genes,
-    "MF",
-    gn,
-    simplify = T
-  )
-
-  df = rbind(bp, mf)
-
-  clusters_enrichGO[[gn]] = df
-}
-
-saveRDS(clusters_enrichGO, "../results/figure2/clusters_enrichGO.rds")
+# # enrichGO function
+# run_enrichGO <- function(
+#   geneList,
+#   geneUniverse = unique(tc_tpm$Gene),
+#   geneOntology = "BP",
+#   groupName = "groupName",
+#   simplify = F
+# ){
+# 
+#   print(paste("Running GO with", geneOntology, "on group", groupName, "..."))
+# 
+#   go = enrichGO(
+#     gene = geneList,
+#     universe = geneUniverse,
+#     OrgDb = org.Hs.eg.db,
+#     keyType       = "SYMBOL",
+#     ont           = geneOntology,
+#     pAdjustMethod = "BH",
+#     qvalueCutoff  = 0.05,
+#     readable      = TRUE
+#   )
+# 
+#   if (simplify){
+# 
+#     print("Simplifying...")
+# 
+#     go <- clusterProfiler::simplify(
+#       go,
+#       cutoff = 0.7,
+#       by = "p.adjust",
+#       select_fun = min
+#     )
+# 
+#   }
+# 
+#   go@result %>%
+#     mutate(groupName = groupName, .before = 1) %>%
+#     mutate(Ontology = geneOntology, .before = ID)
+# 
+# }
+# 
+# 
+# # run enrichGO over all clusters
+# 
+# all_genes = unique(tc_tpm$Gene)
+# 
+# clusters_enrichGO = list()
+# 
+# 
+# for(gn in unique(cluster_assignments$groupName)){
+# 
+#   genelist = cluster_assignments %>%
+#     filter(groupName == gn) %>%
+#     pull(Gene)
+# 
+#   bp = run_enrichGO(
+#     genelist,
+#     all_genes,
+#     "BP",
+#     gn,
+#     simplify = T
+#   )
+# 
+#   mf = run_enrichGO(
+#     genelist,
+#     all_genes,
+#     "MF",
+#     gn,
+#     simplify = T
+#   )
+# 
+#   df = rbind(bp, mf)
+# 
+#   clusters_enrichGO[[gn]] = df
+# }
+# 
+# saveRDS(clusters_enrichGO, "../results/figure2/clusters_enrichGO.rds")
+clusters_enrichGO = readRDS("../results/figure2/clusters_enrichGO.rds")
 
 # cleanup_objects()
 ```
@@ -455,6 +463,8 @@ base_plot(
 ```
 
 
+
+
 ```{r find example genes}
 cluster_candidates = tibble()
 
@@ -511,6 +521,64 @@ ggplot(
 
 
 
+```{r peak times of each cluster, fig.height=6, fig.width=3}
+
+# most of the clusters correspond to peak-time groups, but mid-late and 
+# sustained capture trajectory properties that peak time alone misses
+
+df = cluster_assignments %>%
+  group_by(peak_sig, shape) %>%
+  count(peak) %>%
+  mutate(total = sum(n)) %>%
+  mutate(fraction = n/total) %>%
+  ungroup()
+
+ggplot(
+  df,
+  aes(x = 1, y = fraction, fill = peak)
+) +
+  facet_grid(
+    shape~peak_sig,
+    labeller = labeller(
+      peak_sig = c(
+        "up" = "upreg",
+        "dn" = "downreg"
+      )
+    )
+  ) +
+  geom_col(
+    color = "black"
+  ) +
+  coord_polar(theta = "y") +
+  theme_void()
+
+df2 = cluster_assignments %>%
+  group_by(peak_sig, peak) %>%
+  count(shape) %>%
+  mutate(total = sum(n)) %>%
+  mutate(fraction = n/total) %>%
+  ungroup()
+
+ggplot(
+  df2,
+  aes(x = 1, y = fraction, fill = shape)
+) +
+  facet_grid(
+    peak~peak_sig,
+    labeller = labeller(
+      peak_sig = c(
+        "up" = "upreg",
+        "dn" = "downreg"
+      )
+    )
+  ) +
+  geom_col(
+    color = "black"
+  ) +
+  coord_polar(theta = "y") +
+  theme_void()
+
+```
 
 
 

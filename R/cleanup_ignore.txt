@@ -10,6 +10,8 @@ ikba_tpm
 primary_dea
 primary_tpm
 
+cluster_assignments
+
 dba
 peaks_to_genes
 
