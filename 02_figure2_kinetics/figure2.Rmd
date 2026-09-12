@@ -664,11 +664,112 @@ ggplot(aREA_results, aes(x = NES, y = reorder(tf, NES))) +
     y = "TF"
   )
 
+cleanup_objects()
+
 
 
 # todo: for distributed-peak genes, run full VIPER on all times and
 # look for interesting patterns within peak subpopulations.
 ```
+
+```{r viper on clusters}
+# temporal emergence of STAT/IRF regulatory activity during a sustained NFkB response
+
+# get transcription factor regulon info
+source("../R/get-dorothea-regulons.R")
+
+activity_matrices = list()
+
+for (g in c(
+  "up_immediate",
+  "up_early",
+  "up_mid",
+  "up_mid-late",
+  "up_late",
+  "up_sustained"
+)){
+  
+  goi = cluster_assignments %>%
+    filter(groupName == g) %>%
+    pull(Gene)
+  
+  min_size = min(
+    round(length(goi) * 0.1, 0),
+    10
+  )
+  
+  # min_size = 10
+  # print(paste0(g, " ", min_size))
+  
+  mat = tc_dea %>%
+    filter(treatment == "IL1B", Gene %in% goi) %>%
+    select(Gene, time, log2fold) %>%
+    pivot_wider(values_from = "log2fold", names_from = "time") %>%
+    column_to_rownames("Gene") %>%
+    as.matrix()
+
+  activity = tryCatch(
+    viper::viper(
+      mat,
+      dorothea_regulons[["viper_input"]],
+      minsize = min_size,
+      verbose = F
+    ),
+    error = function(e) {
+      message("Skipped ", g, ": ", e$message)
+      return(NULL)
+    }
+  )
+
+  if (!is.null(activity)) {
+    activity_matrices[[g]] = activity
+  }
+
+  rm(g, goi, min_size, mat, activity)
+}
+
+for(nm in names(activity_matrices)){
+  
+  mat = activity_matrices[[nm]]
+  colors = generic_l2f_heatmap_colors(mat)
+  
+  print(
+    Heatmap(
+      mat,
+      column_title = nm,
+      cluster_columns = FALSE,
+      col = colors
+    )
+  )
+  
+  rm(nm, mat, colors)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
