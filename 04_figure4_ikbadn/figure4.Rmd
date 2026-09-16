@@ -185,7 +185,7 @@ ggplot(
   )
 ```
 
-```{r fig ???, fig.height = 7, fig.width = 5}
+```{r heatmap by peak, fig.height = 7, fig.width = 5}
 
 # ===== setup peak times, matrix, colors, and colsplits =====
 
@@ -275,6 +275,94 @@ draw(
 
 cleanup_objects()
 ```
+
+```{r tf inference}
+
+source("../R/get-dorothea-regulons.R")
+
+mat = ikba_dea %>%
+  filter(treatment == "IL1B") %>%
+  unite(sample, c(condition, time), sep = "_") %>%
+  select(Gene, sample, log2fold) %>%
+  pivot_wider(names_from = "sample", values_from = "log2fold") %>%
+  column_to_rownames("Gene") %>%
+  select(contains("naive"), contains("GFP"), contains("IKBA")) %>%
+  as.matrix()
+
+mat_viper = viper::viper(
+  mat,
+  dorothea_regulons$viper_input
+)
+
+tfs_of_interest = mat_viper %>%
+  as.data.frame() %>%
+  rownames_to_column("tf") %>%
+  rowwise() %>%
+  mutate(abs = max(abs(c_across(-tf)))) %>%
+  ungroup() %>%
+  dplyr::slice_max(abs, n = 20) %>%
+  pull(tf)
+
+top_tfs_mat = mat_viper[tfs_of_interest, ]
+
+colors = circlize::colorRamp2(
+  c(
+    seq(-10, -2.5, length = 90),
+    seq(-2.4, 2.4, length = 20),
+    seq(2.5, 10, length = 90)
+  ),
+  colorRampPalette(
+    c("orchid4", "orchid2", "white", "aquamarine2", "aquamarine4")
+  )(200)
+)
+
+colsplits = factor(
+  c(
+    rep("naive", 3),
+    rep("Ad-GFP", 3),
+    rep("Ad-IKBA", 3)
+  ),
+  levels = c("naive", "Ad-GFP", "Ad-IKBA")
+)
+
+Heatmap(
+  top_tfs_mat,
+  cluster_columns = F,
+  cluster_rows = T,
+  clustering_method_rows = "ward.D2",
+  row_split = 4,
+  col = colors,
+  column_split = colsplits,
+  border = "black",
+  rect_gp = gpar(col = "black", lwd = 0.5),
+  name = "NES",
+  row_title = NULL
+)
+
+for(t in c("RELA", "NFKB1", "JUN", "FOS", "ELK1", "STAT2", "STAT1", "IRF2")){
+  
+  print(
+    mat_viper[t, ] %>%
+      as.data.frame(nm = "NES") %>%
+      rownames_to_column("name") %>%
+      separate(name, into = c("condition", "time"), sep = "_") %>%
+      ggplot(
+        aes(x = time, y = NES, color = condition, group = condition)
+      ) +
+      geom_line() +
+      geom_point() +
+      labs(title = t)
+  )
+  
+}
+
+# cleanup_objects()
+```
+
+
+
+
+
 
 
 
