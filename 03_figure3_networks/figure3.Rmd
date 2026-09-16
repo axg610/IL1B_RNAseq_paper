@@ -25,46 +25,33 @@ source("../R/main-data.R")
 
 ```{r run viper}
 # import dorothea data
-regulons <- dorothea_hs %>%
-  filter(confidence %in% c("A", "B", "C")) %>%
-  mutate(likelihood = case_when(
-    confidence == "A" ~ 1.00,
-    confidence == "B" ~ 0.75,
-    confidence == "C" ~ 0.50
-  ))
+source("../R/get-dorothea-regulons.R")
 
-regulons_summary <- regulons %>%
-  group_by(tf) %>%
-  summarize(
-    max_confidence = if_else("A" %in% confidence, "A", if_else("B" %in% confidence, "B", "C")),
-    n_targets      = length(unique(target)),
-    target_list    = list(target)
-  )
-
-rg <- regulons %>%
-  split(.$tf) %>%
-  map(~list(
-    tfmode     = setNames(.x$mor, .x$target),
-    likelihood = setNames(.x$likelihood, .x$target)
-  ))
-
-# run VIPER on IL1B-regulated genes under IL1B stim
+# run VIPER on all genes under IL1B stim
 mat = tc_dea %>%
-  filter(treatment == "IL1B" & Gene %in% goi) %>%
+  filter(treatment == "IL1B") %>%
   select(Gene, time, log2fold) %>%
   pivot_wider(names_from = "time", values_from = "log2fold") %>%
   column_to_rownames("Gene")
 
-mat_viper = viper(mat, rg, minsize = 10)
+hist(mat$`1`)
+hist(mat$`2`)
+hist(mat$`6`)
+hist(mat$`12`)
+hist(mat$`24`)
+
+mat_viper = viper(
+  mat, 
+  dorothea_regulons[["viper_input"]]
+  )
 
 saveRDS(mat_viper, "../results/figure3/mat_viper.rds")
 
 cleanup_objects()
 ```
 
-Heatmap of top 10 VIPER TFs:
 
-```{r fig ???, fig.height=5, fig.width=4}
+```{r fig ???, fig.height=4, fig.width=3}
 mat_viper = readRDS("../results/figure3/mat_viper.rds")
 
 tfs_of_interest = mat_viper %>%
@@ -80,9 +67,9 @@ top_tfs_mat = mat_viper[tfs_of_interest, ]
 
 colors = circlize::colorRamp2(
   c(
-    seq(-8, -3.5, length = 90),
-    seq(-3.4, 3.4, length = 20),
-    seq(3.4, 8, length = 90)
+    seq(-7, -1.5, length = 90),
+    seq(-1.4, 1.4, length = 20),
+    seq(1.4, 7, length = 90)
   ),
   colorRampPalette(
     c("orchid4", "orchid2", "white", "aquamarine2", "aquamarine4")
@@ -94,7 +81,7 @@ Heatmap(
   cluster_columns = F,
   cluster_rows = T,
   clustering_method_rows = "ward.D2",
-  row_split = 3,
+  row_split = 7,
   col = colors,
   border = "black",
   rect_gp = gpar(col = "black", lwd = 0.5),
