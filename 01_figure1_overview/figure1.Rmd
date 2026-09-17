@@ -85,59 +85,162 @@ PCA and Euclidean distances
 
 # related to il1b-bud-timecourse/modules/pca.R
 
-# prep matrix
+# -------------------------------------------------------------------------
+# Prepare matrix
+# -------------------------------------------------------------------------
+
 mat = tc_tpm %>%
   filter(
-    Gene %in% goi,
     treatment %in% c("NS", "IL1B")
   ) %>%
-  mutate(sample = paste(treatment, time, rep)) %>%
+  mutate(
+    sample = paste(treatment, time, rep)
+  ) %>%
   select(Gene, sample, log2tpm) %>%
-  pivot_wider(names_from = "sample", values_from = "log2tpm") %>%
+  pivot_wider(
+    names_from = sample,
+    values_from = log2tpm
+  ) %>%
   column_to_rownames("Gene") %>%
   as.matrix()
 
-# run pca
-pca <- prcomp(t(mat), center = TRUE, scale. = FALSE)
+# Remove genes with zero variance
+mat = mat[
+  apply(mat, 1, var, na.rm = TRUE) > 0,
+  ,
+  drop = FALSE
+]
 
-# convert pca output to df
-pca_df <- as.data.frame(pca$x) %>%
+# -------------------------------------------------------------------------
+# PCA
+# -------------------------------------------------------------------------
+
+pca = prcomp(
+  t(mat),
+  center = TRUE,
+  scale. = FALSE
+)
+
+# Percent variance explained
+percent_var = 100 * pca$sdev^2 / sum(pca$sdev^2)
+
+# Axis labels
+pc1_label = paste0("PC1 (", round(percent_var[1], 1), "%)")
+pc2_label = paste0("PC2 (", round(percent_var[2], 1), "%)")
+
+# -------------------------------------------------------------------------
+# PCA dataframe
+# -------------------------------------------------------------------------
+
+pca_df = as.data.frame(pca$x) %>%
   rownames_to_column("sample") %>%
-  separate(sample, into = c("treatment","time","rep"), sep = " ") %>%
+  separate(
+    sample,
+    into = c("treatment", "time", "rep"),
+    sep = " "
+  ) %>%
   mutate(
-    treatment = factor(treatment, levels = c("NS", "IL1B")),
-    time = factor(time, levels = c(1, 2, 6, 12, 24))
+    treatment = factor(
+      treatment,
+      levels = c("NS", "IL1B")
+    ),
+    time = factor(
+      time,
+      levels = c(1, 2, 6, 12, 24)
+    )
   )
 
-# compute replicate-level distances from NS
-pca_distance <- pca_df %>%
-  select(treatment, rep, time, PC1, PC2) %>%
+# -------------------------------------------------------------------------
+# Distance of IL1B samples from matched NS samples
+# -------------------------------------------------------------------------
+
+pca_distance = pca_df %>%
+  select(
+    treatment,
+    rep,
+    time,
+    PC1,
+    PC2
+  ) %>%
   left_join(
     pca_df %>%
       filter(treatment == "NS") %>%
-      select(rep, time, PC1, PC2) %>%
-      rename(PC1_NS = PC1, PC2_NS = PC2),
+      select(
+        rep,
+        time,
+        PC1,
+        PC2
+      ) %>%
+      rename(
+        PC1_NS = PC1,
+        PC2_NS = PC2
+      ),
     by = c("rep", "time")
   ) %>%
   filter(treatment != "NS") %>%
   mutate(
     dist = sqrt(
-      (PC1 - PC1_NS)^2 + (PC2 - PC2_NS)^2
+      (PC1 - PC1_NS)^2 +
+      (PC2 - PC2_NS)^2
     )
   ) %>%
-  select(treatment, time, rep, dist)
+  select(
+    treatment,
+    time,
+    rep,
+    dist
+  )
 
-ggplot(pca_df, aes(x = PC1, y = PC2)) +
-  geom_point(aes(color = time, shape = treatment)) +
+# -------------------------------------------------------------------------
+# PCA plot
+# -------------------------------------------------------------------------
+
+ggplot(
+  pca_df,
+  aes(
+    x = PC1,
+    y = PC2
+  )
+) +
+  geom_point(
+    aes(
+      color = time,
+      shape = treatment
+    )
+  ) +
   theme(
     aspect.ratio = 1
   ) +
-  labs(color = NULL, shape = NULL)
+  labs(
+    x = pc1_label,
+    y = pc2_label,
+    color = NULL,
+    shape = NULL
+  )
 
-ggplot(pca_distance, aes(x = time, y = dist)) +
-  stat_summary(geom = "col", fun = "mean") +
-  geom_point(shape = 21, fill = "white") +
-  labs(y = "Euclidean distance from NS")
+# -------------------------------------------------------------------------
+# Distance from matched NS
+# -------------------------------------------------------------------------
+
+ggplot(
+  pca_distance,
+  aes(
+    x = time,
+    y = dist
+  )
+) +
+  stat_summary(
+    geom = "col",
+    fun = "mean"
+  ) +
+  geom_point(
+    shape = 21,
+    fill = "white"
+  ) +
+  labs(
+    x = "Time",
+    y = "Euclidean distance from NS"
+  )
 
 
 cleanup_objects()
