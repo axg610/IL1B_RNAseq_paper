@@ -476,50 +476,66 @@ for(gn in unique(cluster_assignments$groupName)){
     filter(groupName == gn) %>%
     pull(Gene)
   
-  mat = tc_dea %>%
+  # original matrix
+  mat_raw = tc_dea %>%
     filter(treatment == "IL1B", Gene %in% g) %>%
     select(Gene, time, log2fold) %>%
     pivot_wider(values_from = "log2fold", names_from = "time") %>%
     column_to_rownames("Gene") %>%
-    as.matrix() %>%
-    t() %>% scale() %>% t()
+    as.matrix()
   
-  centroid = colMeans(mat)
+  # scaled matrix for kinetics
+  mat_scaled = t(scale(t(mat_raw)))
   
-  cor_to_centroid = apply(mat, 1, function(x) {cor(x, centroid)})
+  # compute cluster centroid
+  centroid = colMeans(mat_scaled, na.rm = TRUE)
   
-  df = data.frame(correlation = cor_to_centroid) %>%
-    rownames_to_column("Gene") %>%
-    arrange(desc(correlation)) %>%
-    slice_head(n = 20) %>%
-    mutate(groupName = gn, .before = 1)
+  # compute correlation to cluster centroid
+  cor_to_centroid = apply(
+    mat_scaled, 
+    1, 
+    function(x) cor(x, centroid, use = "complete.obs")
+  )
   
-  cluster_candidates = rbind(cluster_candidates, df)
+  # max absolute change for each gene
+  max_amplitude = apply(
+    mat_raw,
+    1,
+    function(x) max(abs(x), na.rm = TRUE)
+  )
   
+  # combine metrics
+  df = tibble(
+    groupName = gn,
+    Gene = rownames(mat_raw),
+    correlation = cor_to_centroid,
+    max_amplitude = max_amplitude
+  ) %>%
+    
+    # calculate rank-sums to determine genes which
+    # 1. fit the kinetic, and
+    # 2. are highly regulated
+    
+    mutate(
+      correlation_rank = rank(-correlation),
+      amplitude_rank = rank(-max_amplitude),
+      rank_sum = correlation_rank + amplitude_rank
+    ) %>%
+    arrange(rank_sum) %>%
+    mutate(rank = row_number())
+  
+  cluster_candidates = bind_rows(
+    cluster_candidates,
+    df
+  )
 }
 
 saveRDS(cluster_candidates, "../results/figure2/cluster_candidates.rds")
 write_tsv(cluster_candidates, "../results/figure2/cluster_candidates.txt")
 
-cleanup_objects()
+# cleanup_objects()
 ```
 
-```{r plot example genes, fig.height=2, fig.width=2}
-ggplot(
-  filter(tc_tpm, Gene == "ICAM1", treatment == "IL1B"),
-  aes(x = time, y = log2fold, group = Gene)
-) +
-  facet_wrap(~Gene) +
-  stat_summary(geom = "point", fun = "mean") +
-  stat_summary(geom = "errorbar", fun.data = "mean_sdl", fun.args = list(mult = 1),
-               width = 0.3) +
-  stat_summary(geom = "line", fun = "mean") +
-  theme_bw() +
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 1
-  )
-```
 
 
 
