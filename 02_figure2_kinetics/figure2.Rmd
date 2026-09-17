@@ -317,7 +317,7 @@ clusters_enrichGO = readRDS("../results/figure2/clusters_enrichGO.rds")
 # cleanup_objects()
 ```
 
-```{r fig 2b and fig 2c, fig.height=2, fig.width=5}
+```{r fig 2b and fig 2c, fig.height=1.5, fig.width=5}
 clusters_enrichGO = read_rds("../results/figure2/clusters_enrichGO.rds")
 
 # function to prepare dataframes
@@ -331,7 +331,7 @@ prep_go <- function(
     filter(Count >= countThreshold, p.adjust <= 0.05) %>%
     slice_max(FoldEnrichment, n = nTerms, with_ties = FALSE) %>%
     mutate(
-      Description = str_wrap(str_trunc(Description, 60), 35),
+      Description = str_trunc(Description, 35),
       Description = factor(Description, levels = rev(Description))
     )
   
@@ -376,7 +376,7 @@ base_plot <- function(
     ) +
     theme_bw() +
     theme(
-      aspect.ratio = 2,
+      aspect.ratio = 1,
       panel.grid.minor = element_blank()
     )
 }
@@ -459,6 +459,8 @@ base_plot(
   fill_limits = fillLimits,
   size_limits = sizeLimits
   )
+
+cleanup_objects()
 
 ```
 
