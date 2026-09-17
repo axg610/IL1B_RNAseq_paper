@@ -106,3 +106,65 @@ generic_l2f_heatmap_colors <- function(
   
   colors
 }
+
+
+cluster_diagnostics = function(
+    mat,
+    method = "ward.D2",
+    k_max = 10
+) {
+  
+  # Check input
+  mat = as.matrix(mat)
+  
+  if (anyNA(mat)) {
+    stop("mat contains NA values.")
+  }
+  
+  # Clustering function for factoextra
+  hclust_fun = function(x, k) {
+    factoextra::hcut(
+      x,
+      k = k,
+      hc_method = method
+    )
+  }
+  
+  # Elbow / WSS
+  p_wss = factoextra::fviz_nbclust(
+    mat,
+    hclust_fun,
+    method = "wss",
+    k.max = k_max
+  ) +
+    ggplot2::labs(
+      title = paste0(
+        "Elbow method (",
+        method,
+        ")"
+      ),
+      x = "Number of clusters",
+      y = "Total within-cluster sum of squares"
+    )
+  
+  # Silhouette
+  p_sil = factoextra::fviz_nbclust(
+    mat,
+    hclust_fun,
+    method = "silhouette",
+    k.max = k_max
+  ) +
+    ggplot2::labs(
+      title = paste0(
+        "Silhouette method (",
+        method,
+        ")"
+      ),
+      x = "Number of clusters",
+      y = "Average silhouette width"
+    )
+  
+  print(p_wss)
+  print(p_sil)
+  
+}
