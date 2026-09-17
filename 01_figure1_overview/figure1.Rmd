@@ -311,34 +311,34 @@ hallmark <- msigdbr(species = "Homo sapiens", category = "H") %>%
 
 # get ranked list of genes at their peak
 ranks = tc_dea %>%
-  filter(treatment == "IL1B", sig != "ns", time == peak) %>%
+  filter(treatment == "IL1B", time == peak) %>%
   select(Gene, log2fold) %>%
   arrange(desc(log2fold)) %>%
   deframe()
 
-# # run gsea
-# gsea = GSEA(
-#   geneList = ranks,
-#   TERM2GENE = hallmark,
-#   pvalueCutoff = 1,
-#   verbose = F
-# )
-# 
-# gsea_df = gsea %>%
-#   as.tibble() %>%
-#   select(
-#     Description,
-#     NES,
-#     p.adjust
-#   ) %>%
-#   mutate(
-#     Description = gsub("HALLMARK_", "", Description),
-#     Description = gsub("_", " ", Description)
-#     ) %>%
-#   arrange(NES) %>%
-#   mutate(Description = factor(Description, levels = unique(Description)))
-# 
-# write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
+# run gsea
+gsea = GSEA(
+  geneList = ranks,
+  TERM2GENE = hallmark,
+  pvalueCutoff = 1,
+  verbose = F
+)
+
+gsea_df = gsea %>%
+  as.tibble() %>%
+  select(
+    Description,
+    NES,
+    p.adjust
+  ) %>%
+  mutate(
+    Description = gsub("HALLMARK_", "", Description),
+    Description = gsub("_", " ", Description)
+    ) %>%
+  arrange(NES) %>%
+  mutate(Description = factor(Description, levels = unique(Description)))
+
+write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
 gsea_df = read_tsv("../results/figure1/gsea_df.txt")
   
 ggplot(
