@@ -249,57 +249,217 @@ cleanup_objects()
 DEG heatmap
 
 ```{r fig 1d, fig.height=4, fig.width=4, dpi=600}
-#related to il1b-timecourse/modules/fig-il1b-heatmap.R
+# related to il1b-timecourse/modules/fig-il1b-heatmap.R
 
-goi <- tc_dea %>%
-  filter(peak_sig != "ns" & treatment == "IL1B") %>%
-  pull(Gene) %>% unique() %>% sort()
+goi_up <- tc_dea %>%
+  filter(
+    peak_sig == "up",
+    treatment == "IL1B"
+  ) %>%
+  pull(Gene) %>%
+  unique() %>%
+  sort()
+
+goi_dn <- tc_dea %>%
+  filter(
+    peak_sig == "dn",
+    treatment == "IL1B"
+  ) %>%
+  pull(Gene) %>%
+  unique() %>%
+  sort()
+
+# -------------------------------------------------------------------------
+# Matrix
+# -------------------------------------------------------------------------
 
 mat <- tc_tpm %>%
-  filter(Gene %in% goi & treatment == "IL1B") %>%
-  mutate(sample = paste0("t", time, "h ", rep)) %>%
-  select(Gene, sample, log2fold) %>%
-  pivot_wider(names_from = "sample", values_from = "log2fold") %>%
+  filter(treatment == "IL1B") %>%
+  mutate(
+    sample = paste0("t", time, "h ", rep)
+  ) %>%
   select(
-    Gene, 
-    contains("t1h"), 
-    contains("t2h"), 
-    contains("t6h"), 
-    contains("t12h"), 
+    Gene,
+    sample,
+    log2fold
+  ) %>%
+  pivot_wider(
+    names_from = "sample",
+    values_from = "log2fold"
+  ) %>%
+  select(
+    Gene,
+    contains("t1h"),
+    contains("t2h"),
+    contains("t6h"),
+    contains("t12h"),
     contains("t24h")
-    ) %>%
+  ) %>%
   column_to_rownames("Gene") %>%
   as.matrix()
 
-# %>% 
-#   { .[hclust(dist(.), method = "ward.D2")$order, ] }
+# -------------------------------------------------------------------------
+# Z-score trajectories for clustering
+# -------------------------------------------------------------------------
 
-colors = circlize::colorRamp2(
-  seq(-5, 5, length = 200),
-  colorRampPalette(c("steelblue4", "steelblue3" , "white", "firebrick3", "firebrick4"))(200))
+mat_up = mat[goi_up, , drop = FALSE]
+mat_dn = mat[goi_dn, , drop = FALSE]
 
-columnSplits <- factor(
-  c(
-    rep("1", 4), 
-    rep("2", 4), 
-    rep("6", 4), 
-    rep("12", 4), 
-    rep("24", 4)), 
-  levels = c("1", "2", "6", "12", "24")
+mat_up_z = t(scale(t(mat_up)))
+mat_dn_z = t(scale(t(mat_dn)))
+
+# Remove genes that cannot be z-scored
+mat_up_z = mat_up_z[
+  complete.cases(mat_up_z),
+  ,
+  drop = FALSE
+]
+
+mat_dn_z = mat_dn_z[
+  complete.cases(mat_dn_z),
+  ,
+  drop = FALSE
+]
+
+# Keep raw matrices synchronized with z-scored matrices
+mat_up = mat_up[rownames(mat_up_z), , drop = FALSE]
+mat_dn = mat_dn[rownames(mat_dn_z), , drop = FALSE]
+
+# -------------------------------------------------------------------------
+# Determine number of clusters
+# -------------------------------------------------------------------------
+
+cluster_diagnostics(
+  mat_up_z,
+  method = "ward.D2"
 )
+
+cluster_diagnostics(
+  mat_dn_z,
+  method = "ward.D2"
+)
+
+# -------------------------------------------------------------------------
+# Perform clustering on z-scored trajectories
+# -------------------------------------------------------------------------
+
+hc_up = hclust(
+  dist(mat_up_z),
+  method = "ward.D2"
+)
+
+hc_dn = hclust(
+  dist(mat_dn_z),
+  method = "ward.D2"
+)
+
+# Set chosen number of clusters
+k_up = 4
+k_dn = 3
+
+clusters_up = cutree(
+  hc_up,
+  k = k_up
+)
+
+clusters_dn = cutree(
+  hc_dn,
+  k = k_dn
+)
+
+# -------------------------------------------------------------------------
+# Order raw log2FC matrices according to z-score clustering
+# -------------------------------------------------------------------------
+
+mat_up = mat_up[
+  hc_up$order,
+  ,
+  drop = FALSE
+]
+
+mat_dn = mat_dn[
+  hc_dn$order,
+  ,
+  drop = FALSE
+]
+
+# Cluster assignments in the same order as the heatmap
+clusters_up = clusters_up[
+  rownames(mat_up)
+]
+
+clusters_dn = clusters_dn[
+  rownames(mat_dn)
+]
+
+# -------------------------------------------------------------------------
+# Heatmap setup
+# -------------------------------------------------------------------------
+
+colors = generic_l2f_heatmap_colors(
+  c(mat_up, mat_dn)
+)
+
+columnSplits = factor(
+  c(
+    rep("1", 4),
+    rep("2", 4),
+    rep("6", 4),
+    rep("12", 4),
+    rep("24", 4)
+  ),
+  levels = c(
+    "1",
+    "2",
+    "6",
+    "12",
+    "24"
+  )
+)
+
+# -------------------------------------------------------------------------
+# Upregulated genes
+# -------------------------------------------------------------------------
 
 Heatmap(
-  mat,
+  mat_up,
   col = colors,
-  cluster_rows = T, cluster_columns = F,
-  clustering_method_rows = "ward.D2",
-  show_row_dend = T, show_column_dend = F,
-  show_row_names = F, show_column_names = F,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  show_row_names = FALSE,
+  show_column_names = FALSE,
   column_split = columnSplits,
-  border = T,
-  use_raster = T,
+  row_split = clusters_up,
+  border = TRUE,
+  use_raster = TRUE,
   name = "log2fold"
 )
+
+# -------------------------------------------------------------------------
+# Downregulated genes
+# -------------------------------------------------------------------------
+
+Heatmap(
+  mat_dn,
+  col = colors,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  show_row_names = FALSE,
+  show_column_names = FALSE,
+  column_split = columnSplits,
+  row_split = clusters_dn,
+  border = TRUE,
+  use_raster = TRUE,
+  name = "log2fold"
+)
+
+cleanup_objects()
+
+
 ```
 
 GSEA on all heatmap genes
@@ -316,30 +476,32 @@ ranks = tc_dea %>%
   arrange(desc(log2fold)) %>%
   deframe()
 
-# run gsea
-gsea = GSEA(
-  geneList = ranks,
-  TERM2GENE = hallmark,
-  pvalueCutoff = 1,
-  verbose = F
-)
+# # run gsea
+# gsea = GSEA(
+#   geneList = ranks,
+#   TERM2GENE = hallmark,
+#   pvalueCutoff = 1,
+#   verbose = F
+# )
+# 
+# gsea_df = gsea %>%
+#   as.tibble() %>%
+#   select(
+#     Description,
+#     NES,
+#     p.adjust
+#   ) %>%
+#   mutate(
+#     Description = gsub("HALLMARK_", "", Description),
+#     Description = gsub("_", " ", Description)
+#     ) %>%
+#   arrange(NES) %>%
+#   mutate(Description = factor(Description, levels = unique(Description)))
+# 
+# write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
 
-gsea_df = gsea %>%
-  as.tibble() %>%
-  select(
-    Description,
-    NES,
-    p.adjust
-  ) %>%
-  mutate(
-    Description = gsub("HALLMARK_", "", Description),
-    Description = gsub("_", " ", Description)
-    ) %>%
-  arrange(NES) %>%
+gsea_df = read_tsv("../results/figure1/gsea_df.txt") %>%
   mutate(Description = factor(Description, levels = unique(Description)))
-
-write_tsv(gsea_df, "../results/figure1/gsea_df.txt")
-gsea_df = read_tsv("../results/figure1/gsea_df.txt")
   
 ggplot(
   gsea_df %>% filter(p.adjust <= 0.05),
@@ -354,7 +516,8 @@ ggplot(
   geom_vline(xintercept = 0, linetype = "dashed", color = "black", lwd = 0.5) +
   labs(
     fill = expression(-log[10] * "(FDR)"),
-    y = NULL
+    y = NULL,
+    x = "direction (NES)"
   )
 
 barplot(ranks)
