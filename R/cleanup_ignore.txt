@@ -1,6 +1,7 @@
 cleanup_objects
 plot_euler
 generic_l2f_heatmap_colors
+cluster_diagnostics
 
 tc_dea
 tc_tpm
