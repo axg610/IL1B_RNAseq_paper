@@ -7,10 +7,13 @@ library(factoextra)
 library(ComplexHeatmap)
 library(pheatmap)
 library(cowplot)
+library(igraph)
+library(ggraph)
 
 # databases
 library(msigdbr)
 library(org.Hs.eg.db)
+library(STRINGdb)
 
 # tidyverse
 library(tidyverse)
@@ -166,6 +169,8 @@ writexl::write_xlsx(cluster_assignments, "../results/figure2/cluster_assignments
 
 cleanup_objects()
 ```
+
+
 
 ```{r fig 2a, fig.height=6, fig.width=3}
 df = tc_dea %>%
@@ -466,7 +471,6 @@ cleanup_objects()
 
 
 
-
 ```{r find example genes}
 cluster_candidates = tibble()
 
@@ -535,7 +539,6 @@ write_tsv(cluster_candidates, "../results/figure2/cluster_candidates.txt")
 
 # cleanup_objects()
 ```
-
 
 
 
@@ -767,8 +770,234 @@ for(nm in names(activity_matrices)){
 
 
 
+```{r construct full networks for each cluster}
+# # interaction database
+# string_db = STRINGdb$new(
+#   version = "12.0",
+#   species = 9606,
+#   score_threshold = 700  # high confidence (>0.7)
+# )
+# 
+# # construct full networks for each cluster
+# 
+# cluster_string_networks = list()
+# 
+# for(gn in unique(cluster_assignments$groupName)){
+#   
+#   print(paste0("Processing cluster ", gn, "..."))
+#   
+#   # pull genes
+#   genelist = cluster_assignments %>%
+#     filter(groupName == gn) %>%
+#     pull(Gene)
+#   
+#   # map string IDs to genes
+#   mapped = string_db$map(
+#     data.frame(gene = genelist),
+#     "gene",
+#     removeUnmappedRows = TRUE
+#   )
+#   
+#   # pull interactions for string IDs
+#   edges = string_db$get_interactions(mapped$STRING_id) %>%
+#     filter(
+#       from %in% mapped$STRING_id,
+#       to %in% mapped$STRING_id
+#     ) %>%
+#     mutate(
+#       from = mapped$gene[match(from, mapped$STRING_id)],
+#       to = mapped$gene[match(to, mapped$STRING_id)]
+#     )
+#   
+#   cluster_string_networks[[gn]] = edges
+#   
+#   rm(gn, genelist, mapped, edges)
+# }
+# 
+# saveRDS(
+#   cluster_string_networks, 
+#   "../results/figure2/cluster_string_networks.rds"
+#   )
+# 
+# cleanup_objects()
+
+cluster_string_networks = readRDS(
+  "../results/figure2/cluster_string_networks.rds"
+  )
+```
+
+```{r plot full networks for each cluster, fig.width=3, fig.height=3}
+cluster_string_networks = readRDS(
+  "../results/figure2/cluster_string_networks.rds"
+  )
+
+for(gn in unique(cluster_assignments$groupName)){
+  g = cluster_string_networks[[gn]] %>%
+    select(from, to, combined_score) %>%
+    graph_from_data_frame(directed = FALSE)
+  
+  communities = cluster_louvain(g)
+  V(g)$community = membership(communities)
+  
+  set.seed(777)
+  ggraph(g, layout = "fr") +
+    geom_edge_link(
+      aes(
+        width = scale(combined_score)
+      ),
+    ) +
+    geom_node_point(
+      aes(
+        fill = factor(community)
+      ),
+      shape = 21,
+      size = 2,
+      stroke = 0.3
+    ) +
+    scale_edge_width(range = c(0.1, 0.5)) +
+    theme_void() +
+    theme(
+      legend.position = "none",
+      aspect.ratio = 1
+    ) +
+    scale_y_continuous(expand = expansion(mult = 0.1)) +
+    scale_x_continuous(expand = expansion(mult = 0.1)) +
+    labs(title = gn)
+  
+  ggsave(
+    paste0("../results/figure2/stringdb images/", gn, ".jpg"),
+    h = 1.5, w = 1.5, dpi = 600
+  )
+  
+  set.seed(777)
+  ggraph(g, layout = "fr") +
+    geom_edge_link() +
+    geom_node_label(
+      aes(
+        label = name,
+        fill = factor(community)
+      ),
+      size = 1
+    ) +
+    theme_void() +
+    theme(
+      legend.position = "none",
+      aspect.ratio = 1
+    ) +
+    scale_y_continuous(expand = expansion(mult = 0.1)) +
+    scale_x_continuous(expand = expansion(mult = 0.1)) +
+    labs(title = paste0(gn , " (labelled"))
+  
+  ggsave(
+    paste0("../results/figure2/stringdb images/", gn, "-labelled.jpg"),
+    h = 10, w = 10, dpi = 600
+  )
+  
+}
+
+cleanup_objects()
+
+# calculate % genes mapped, number of connections, density, etc.
+
+```
 
 
+
+```{r stringdb to visualize subnetworks, fig.width=4, fig.height=3}
+# genes = c(
+#   "FOSL1", "EGR3", "TRIB1", "JUNB", "EGR2", "EGR1",
+#   "FOSB", "FOS", "DUSP5", "JUN", "NR4A2", "NR4A1",
+#   "ATF3", "ZFP36", "IER2", "KLF6", "DUSP1", "PPP1R15A",
+#   "BTG2"
+# )
+# # up_sustained, w=4, h=4
+
+# genes = c(
+#   "RCAN1", "NFATC1", "NFKBID", "BCL3", "REL", "NFKBIA",
+#   "NFKBIE", "NFKBIZ", "IL1A", "IRF1", "SOCS3"
+# )
+# # up_early, w=3, h=3
+
+# genes = c(
+#   "STAT2", "RIGI", "IFIH1", "SAMD9", "IFIT1", "XAF1",
+#   "PLSCR1", "OASL", "IFIT3", "OAS3", "PARP9", "PARP14", "PLSCR1",
+#   "IFIT5", "RTP4", "ADAR", "E1F2AK2", "USP18", "DDX60",
+#   "RSAD2", "IFI44L", "SAMD9L", "MX2", "IFIT2",
+#   "SAMHD1", "CMPK2", "GBP1"
+# )
+# # up_mid, w=4, h=5
+
+genes = c(
+  "NOS2", "PTGS2", "CD40",
+  "VCAM1", "ICAM1", "IL1B",
+  "ZC3H12A", "CXCR4", "CCL4", "CCL2", "CXCL10", "IL15",
+  "CXCR2", "CX3CL1", "IL7",
+  "CCL1", "CCL22"
+)
+
+# interaction database
+string_db = STRINGdb$new(
+  version = "12.0",
+  species = 9606,
+  score_threshold = 700  # high confidence (>0.7)
+)
+
+# map string IDs to genes
+mapped = string_db$map(
+  data.frame(gene = genes),
+  "gene",
+  removeUnmappedRows = TRUE
+)
+
+# pull interactions for string IDs
+edges = string_db$get_interactions(mapped$STRING_id) %>%
+  filter(
+    from %in% mapped$STRING_id,
+    to %in% mapped$STRING_id
+  ) %>%
+  mutate(
+    from = mapped$gene[match(from, mapped$STRING_id)],
+    to = mapped$gene[match(to, mapped$STRING_id)]
+  )
+
+# construct graph
+g = edges %>%
+  select(from, to, combined_score) %>%
+  graph_from_data_frame(directed = FALSE) %>%
+  set_vertex_attr("degree", value = degree(.))
+
+set.seed(777)
+ggraph(g, layout = "fr") +
+  geom_edge_link(
+    aes(
+      width = scale(combined_score),
+      linetype = combined_score < 900
+    ),
+    alpha = 0.5
+  ) +
+  geom_node_label(
+    aes(label = name, fill = scale(degree)),
+    color = "black",
+    size = 4
+  ) +
+  scale_edge_width(range = c(0.1, 1.3)) +
+  scale_edge_linetype_manual(
+    values = c(`FALSE` = "solid", `TRUE` = "dotted")
+  ) +
+  scale_fill_gradient(
+    low = "#F6E8B1",
+    high = "#C97A40"
+    
+    
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    # aspect.ratio = 1
+  ) +
+  scale_y_continuous(expand = expansion(mult = 0.1)) +
+  scale_x_continuous(expand = expansion(mult = 0.1))
+```
 
 
 
