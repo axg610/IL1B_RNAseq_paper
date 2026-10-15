@@ -93,7 +93,7 @@ cat > run_xstreme.sh <<'EOF'
 #SBATCH --error=/work/newton_lab/ag_analysis/a549-il1b-bud-timecourse/xstreme/logs/xstreme_%j.err
 #SBATCH --time=04:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=2G
+#SBATCH --mem=8G
 
 FASTA="$1"
 BACKGROUND="$2"
@@ -126,13 +126,14 @@ EOF
 ```
 
 ## start xstreme runs
+
 ```bash
 
 # db is HOCOLOCO V13
 # background is promoters from all clusters combined
 
-BACKGROUND="./promoters/all_promoters.fa"
-OUTPUT="./xstreme_promoters"
+BACKGROUND="./promoters/all_sleuth_genes_promoters.fa"
+OUTPUT="./results_sleuth-background"
 
 mkdir -p "$OUTPUT"
 
@@ -140,7 +141,32 @@ for f in ./promoters/*.fa; do
 
     FASTA="$f"
 
-    if [[ "$FASTA" == "./promoters/all_promoters.fa" ]]; then
+    if [[ "$FASTA" == "./promoters/all_sleuth_genes_promoters.fa" ]]; then
+        echo "Skipping $FASTA"
+        continue
+    fi
+
+    sbatch run_xstreme.sh "$FASTA" "$BACKGROUND" "$OUTPUT"
+
+done
+```
+
+```bash
+
+# db is HOCOLOCO V13
+# background is promoters from all clusters combined
+
+BACKGROUND="./promoters/all_clusters_promoters.fa"
+OUTPUT="./results_cluster-background"
+
+mkdir -p "$OUTPUT"
+
+for f in ./promoters/*.fa; do
+
+    FASTA="$f"
+
+    if [[ "$FASTA" == "./promoters/all_clusters_promoters.fa" ]] || \
+       [[ "$FASTA" == "./promoters/all_sleuth_genes_promoters.fa" ]]; then
         echo "Skipping $FASTA"
         continue
     fi
