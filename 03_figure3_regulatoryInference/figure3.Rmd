@@ -47,6 +47,11 @@ mat_viper = viper(
 
 saveRDS(mat_viper, "../results/figure3/mat_viper.rds")
 
+mat_viper %>%
+  as.data.frame() %>%
+  rownames_to_column("tf") %>%
+  writexl::write_xlsx("../results/figure3/mat_viper.xlsx")
+
 cleanup_objects()
 ```
 
