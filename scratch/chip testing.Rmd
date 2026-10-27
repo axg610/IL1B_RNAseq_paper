@@ -1,8 +1,6 @@
 ```{r setup, include=F}
-
-
-library(GenomicRanges)
-library(EnsDb.Hsapiens.v86)
+# library(GenomicRanges)
+# library(EnsDb.Hsapiens.v86)
 
 library(tidyverse)
 
@@ -14,17 +12,10 @@ source("../R/chipseq-data.R")
 cleanup_objects()
 ```
 
-```{r load helpers}
+Distance from TSS to nearest peak?
 
-```
-
-```{r fig.width=6, fig.height=4}
+```{r fig.width=4, fig.height=3}
 cluster_assignments = readRDS("../results/figure2/cluster_assignments.rds")
-
-peak_times = tc_dea %>%
-  filter(treatment == "IL1B") %>%
-  select(Gene, peak) %>%
-  distinct()
 
 chip_locations = peaks_to_genes[["long_data"]] %>%
   filter(str_detect(peak_id, "RELApeak"))
@@ -34,33 +25,12 @@ df = left_join(
   cluster_assignments,
   by = "Gene"
 ) %>%
-  left_join(
-    peak_times,
-    by = "Gene"
-    ) %>%
-  filter(!is.na(cluster))
-
-ggplot(
-  df,
-  aes(x = peak, y = distance_to_TSS)
-) +
-  facet_wrap(~peak_sig) +
-  geom_violin(
-    scale = "area"
-  ) +
-  geom_boxplot(
-    width = 0.2
-  ) +
-  # geom_jitter(
-  #   alpha = 0.2,
-  #   width = 0.2,
-  #   shape = 16,
-  #   stroke = NA,
-  #   size = 0.3
-  # ) +
-  theme(
-    aspect.ratio = 0.5
-  )
+  filter(!is.na(cluster)) %>%
+  group_by(Gene) %>%
+  mutate(distance_to_TSS = min(distance_to_TSS)) %>%
+  select(-peak_id) %>%
+  distinct() %>%
+  ungroup()
 
 ggplot(
   df,
@@ -68,21 +38,81 @@ ggplot(
 ) +
   facet_wrap(~peak_sig) +
   geom_violin(
-    scale = "area"
+    scale = "width"
   ) +
   geom_boxplot(
-    width = 0.2
+    width = 0.2,
+    outliers = F
   ) +
-  # geom_jitter(
-  #   alpha = 0.2,
-  #   width = 0.2,
-  #   shape = 16,
-  #   stroke = NA,
-  #   size = 0.3
-  # ) +
   theme(
     aspect.ratio = 0.5
   )
+
+# ===== early and peak vs early and sustain =====
+
+df_2h_kinetics = df %>%
+  mutate(
+    groupName = case_when(
+      groupName %in% c("up_immediate", "up_early") ~ "transient peak",
+      groupName %in% c("up_sustained") ~ "sustained expression"
+    )
+  ) %>%
+  filter(!is.na(groupName))
+
+ggplot(
+  df_2h_kinetics, 
+  aes(x = groupName, y = distance_to_TSS)
+  ) +
+  geom_violin(scale = "width") +
+  geom_boxplot(width = 0.15, outliers = F) +
+  geom_jitter(width = 0.08, alpha = 0.3)
+
+df_2h_kinetics %>% 
+  filter(groupName == "sustained expression") %>% 
+  pull(distance_to_TSS) %>% 
+  summary()
+
+df_2h_kinetics %>% 
+  filter(groupName == "transient peak") %>% 
+  pull(distance_to_TSS) %>% 
+  summary()
+
+car::leveneTest(distance_to_TSS~groupName, data = df_2h_kinetics)
+
+t.test(distance_to_TSS~groupName, data = df_2h_kinetics, var.equal = TRUE)
+
+# ===== mid and peak vs mid and sustain =====
+
+df_6h_kinetics = df %>%
+  mutate(
+    groupName = case_when(
+      groupName %in% c("up_mid") ~ "transient peak",
+      groupName %in% c("up_mid-late") ~ "sustained expression"
+    )
+  ) %>%
+  filter(!is.na(groupName))
+
+ggplot(
+  df_6h_kinetics, 
+  aes(x = groupName, y = distance_to_TSS)
+  ) +
+  geom_violin(scale = "width") +
+  geom_boxplot(width = 0.15, outliers = F) +
+  geom_jitter(width = 0.08, alpha = 0.3)
+
+df_6h_kinetics %>% 
+  filter(groupName == "sustained expression") %>% 
+  pull(distance_to_TSS) %>% 
+  summary()
+
+df_6h_kinetics %>% 
+  filter(groupName == "transient peak") %>% 
+  pull(distance_to_TSS) %>% 
+  summary()
+
+car::leveneTest(distance_to_TSS~groupName, data = df_6h_kinetics)
+
+t.test(distance_to_TSS~groupName, data = df_6h_kinetics, var.equal = F)
 
 cleanup_objects()
 ```
