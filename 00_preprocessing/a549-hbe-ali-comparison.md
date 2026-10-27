@@ -270,6 +270,11 @@ s2c_hbe_il1b_6h <- s2c %>%
   filter(time == 6, celltype == "HBE", treatment %in% c("NS", "IL1B")) %>%
   mutate(donor = rep)
 
+# hbe timecourse s2c
+s2c_hbe_2h <- filter(s2c, time == 2 & celltype == "HBE")
+s2c_hbe_6h <- filter(s2c, time == 6 & celltype == "HBE")
+s2c_hbe_24h <- filter(s2c, time == 24 & celltype == "HBE")
+
 # add more s2cs here
 ```
 
@@ -565,7 +570,7 @@ lrt_results = sleuth_results(so_il1b_6h, "reduced:full", test_type = "lrt") %>%
 write_tsv(lrt_results, "sleuth/A549vsPrimary_lrt_IL1B_6h.txt")
 ```
 
-```r donor./treatment LRT for IL1B
+```r donor/treatment LRT for IL1B
 # so_il1b_6h = sleuth_prep(
 #     sample_to_covariates = s2c_il1b_6h,
 #     target_mapping = t2g,
@@ -602,6 +607,114 @@ lrt2_results = sleuth_results(so_il1b_6h, "reduced:full", test_type = "lrt") %>%
 
 write_tsv(lrt2_results, "sleuth/A549vsPrimary_lrt2_IL1B_6h.txt")
 ```
+
+```r ~treatment model, HBE timecourse
+so_hbe_2h = sleuth_prep(
+    sample_to_covariates = s2c_hbe_2h,
+    full_model = ~treatment,
+    target_mapping = t2g,
+    gene_mode = TRUE, aggregation_column = "Gene",
+    filter_fun = new_filter, num_cores = 4
+) %>%
+    sleuth_fit(., ~treatment) %>%
+    sleuth_wt("treatmentIL1B") %>%
+    sleuth_wt("treatmentGC") %>%
+    sleuth_wt("treatmentcombo")
+
+so_hbe_6h = sleuth_prep(
+    sample_to_covariates = s2c_hbe_6h,
+    full_model = ~treatment,
+    target_mapping = t2g,
+    gene_mode = TRUE, aggregation_column = "Gene",
+    filter_fun = new_filter, num_cores = 4
+) %>%
+    sleuth_fit(., ~treatment) %>%
+    sleuth_wt("treatmentIL1B") %>%
+    sleuth_wt("treatmentGC") %>%
+    sleuth_wt("treatmentcombo")
+
+so_hbe_24h = sleuth_prep(
+    sample_to_covariates = s2c_hbe_24h,
+    full_model = ~treatment,
+    target_mapping = t2g,
+    gene_mode = TRUE, aggregation_column = "Gene",
+    filter_fun = new_filter, num_cores = 4
+) %>%
+    sleuth_fit(., ~treatment) %>%
+    sleuth_wt("treatmentIL1B") %>%
+    sleuth_wt("treatmentGC") %>%
+    sleuth_wt("treatmentcombo")
+
+# save
+saveRDS(so_hbe_2h, "sleuth/objects/so_hbe_2h.rds")
+saveRDS(so_hbe_6h, "sleuth/objects/so_hbe_6h.rds")
+saveRDS(so_hbe_24h, "sleuth/objects/so_hbe_24h.rds")
+
+# pull data
+a <- sleuth_results(so_hbe_2h, "treatmentIL1B") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "IL1B", time = "2", .before = 2)
+
+b <- sleuth_results(so_hbe_2h, "treatmentGC") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "GC", time = "2", .before = 2)
+
+c <- sleuth_results(so_hbe_2h, "treatmentcombo") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "combo", time = "2", .before = 2)
+
+d <- sleuth_results(so_hbe_6h, "treatmentIL1B") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "IL1B", time = "6", .before = 2)
+
+e <- sleuth_results(so_hbe_6h, "treatmentGC") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "GC", time = "6", .before = 2)
+
+f <- sleuth_results(so_hbe_6h, "treatmentcombo") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "combo", time = "6", .before = 2)
+
+g <- sleuth_results(so_hbe_24h, "treatmentIL1B") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "IL1B", time = "24", .before = 2)
+
+h <- sleuth_results(so_hbe_24h, "treatmentGC") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "GC", time = "24", .before = 2)
+
+i <- sleuth_results(so_hbe_24h, "treatmentcombo") %>%
+    select(Gene = target_id, log2fold = b, FDR = qval) %>%
+    mutate(log2fold = log2fold / log(2)) %>%
+    mutate(celltype = "HBE", treatment = "combo", time = "24", .before = 2)
+
+results_hbe_tc = rbind(a,b,c,d,e,f,g,h,i) %>%
+    mutate(
+        treatment = factor(treatment, levels = c("IL1B", "GC", "combo")),
+        time = factor(time, levels = c("2", "6", "24"))
+        ) %>%
+    arrange(Gene, celltype, treatment) %>%
+    filter(grepl("^[A-Za-z0-9]+$", Gene)) %>%
+    group_by(Gene) %>%
+    filter(!all(is.na(log2fold))) %>%
+    ungroup() %>%
+    mutate(
+        log2fold = if_else(is.na(log2fold), 0, log2fold),
+        FDR = if_else(is.na(FDR), 1, FDR)
+        )
+
+write_tsv(results_hbe_tc, "sleuth/hbe_timecourse_dea.txt")
+```
+
+
 
 ### DESeq2 modelling and DEA work
 
@@ -822,9 +935,78 @@ write_tsv(interaction, "deseq2/deseq2-A549vsPrimary-interaction.txt")
 ```
 
 
+### transcript-level quantification in sleuth
+
+```bash
+mkdir -p sleuth
+R
+```
+
+```r setup
+.libPaths("/home/alex.gao1/R")
+setwd("/work/newton_lab/ag_analysis/a549-hbe-ali-comparison")
+
+library(dplyr)
+library(readr)
+library(sleuth)
+library(stringr)
+
+system("mkdir sleuth/objects")
+system("ls sleuth")
+```
+
+```r prepare sleuth inputs
+
+# transcript ids to gene names
+t2g <- read_tsv("/work/newton_lab/ag_analysis/ref_seq/Homo_sapiens.GRCh38.p14.cdna.all_mart_export.txt") %>%
+  select(target_id = `Transcript stable ID`, Gene = `Gene name`) %>%
+  na.omit() %>% 
+  distinct()
+
+#filter requiring at least 5 reads in at least 20% of samples
+new_filter <- function(row, min_reads = 5, min_prop = 0.2){mean(row >= min_reads) >= min_prop}
+
+# full s2c
+s2c <- rbind(
+        read_tsv("meta_a549_il1b_bud.txt"),
+        read_tsv("meta_ali_il1b_bud.txt"),
+        read_tsv("meta_hbe_il1b_dex.txt")) %>%
+    mutate(
+        treatment = if_else(treatment == "Dex" | treatment == "Bud", "GC", treatment),
+        treatment = if_else(treatment == "I+D" | treatment == "I+B", "combo", treatment)) %>%
+    mutate(
+        treatment = factor(treatment, levels = c("NS", "IL1B", "GC", "combo")),
+        celltype = factor(celltype, levels = c("A549", "ALI", "HBE"))
+    ) %>%
+    select(sample, rep, celltype, treatment, time, path = kallisto_path)
+
+```
 
 
+```r hbe il1b at 2h
+
+s2c_hbe_il1b_2h = s2c %>%
+    filter(time == 2, treatment %in% c("NS", "IL1B"), celltype == "HBE")
+
+so_hbe_il1b_2h <- sleuth_prep(
+    sample_to_covariates = s2c_hbe_il1b_2h,
+    target_mapping = t2g,
+    filter_fun = new_filter,
+    num_cores = 4
+    )
 
 
+transcripts_hbe_il1b_2h <- kallisto_table(so_hbe_il1b_2h, use_filtered = FALSE) %>%
+    select(transcript = target_id, rep, celltype, treatment, time, tpm) %>%
+    mutate(target_id = sub("\\.\\d+$", "", transcript)) %>%
+    left_join(t2g, by = "target_id") %>%
+    filter(grepl("^[A-Za-z0-9]+$", Gene)) %>%
+    select(Gene, transcript, rep, celltype, treatment, time, tpm) %>%
+    arrange(Gene, transcript, rep, celltype, treatment, time, tpm) %>%
+    group_by(transcript) %>%
+    filter(!all(tpm == 0)) %>%
+    ungroup()
 
+write_tsv(transcripts_hbe_il1b_2h, "sleuth/hbe_2h_il1b_transcripts.txt")
 
+```
