@@ -18,6 +18,7 @@
 data/
 manuscript/
 results/
+scratch/
 
 # file types
 *.pptx
