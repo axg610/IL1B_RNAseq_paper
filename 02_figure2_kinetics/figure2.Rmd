@@ -130,7 +130,7 @@ cluster_assignments = rbind(clust_up, clust_dn) %>%
     shape = factor(
       shape,
       levels = c(
-        "immediate", "early", "mid", "mid-late", "late", "sustained"
+        "immediate", "early", "sustained", "mid", "mid-late", "late"
       )
     )
   ) %>%
@@ -172,7 +172,7 @@ cleanup_objects()
 
 
 
-```{r fig 2a, fig.height=6, fig.width=3}
+```{r fig 2a, fig.height=5.5, fig.width=3}
 df = tc_dea %>%
   left_join(cluster_assignments, by = c("Gene", "peak_sig")) %>%
   filter(
@@ -238,6 +238,9 @@ cluster_assignments %>%
 
 cleanup_objects()
 ```
+
+
+
 
 ```{r run gene ontology}
 # # enrichGO function
@@ -610,6 +613,9 @@ ggplot(
 
 cleanup_objects()
 ```
+
+
+
 
 ```{r run viper/aREA on clusters, fig.height=5, fig.width=3}
 

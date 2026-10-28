@@ -62,19 +62,27 @@ cleanup_objects()
 
 Number of genes that are up- or down-regulated at each peak
 
-```{r fig 1b, fig.height=2.5, fig.width=3}
+```{r fig 1b, fig.height=2.5, fig.width=4}
 df = tc_dea %>%
   filter(treatment == "IL1B" & peak_sig != "ns") %>%
   select(Gene, peak_sig, peak) %>%
   distinct() %>%
   count(peak_sig, peak)
 
-ggplot(df, aes(x = peak, y = n)) +
+ggplot(df, aes(x = peak, y = n, fill = peak_sig)) +
   facet_wrap(~peak_sig) +
   geom_col() +
-  geom_text(aes(label = n), vjust = -1) +
+  geom_text(aes(label = n), vjust = -1, size = 3.5) +
   theme(aspect.ratio = 1.5) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1.5,
+    strip.background = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("firebrick2", "steelblue2")) +
+  labs(x = "time of peak expression", y = "# DEGs")
 
 cleanup_objects()
 ```
@@ -85,163 +93,118 @@ PCA and Euclidean distances
 
 # related to il1b-bud-timecourse/modules/pca.R
 
-# -------------------------------------------------------------------------
 # Prepare matrix
-# -------------------------------------------------------------------------
-
 mat = tc_tpm %>%
-  filter(
-    treatment %in% c("NS", "IL1B")
-  ) %>%
-  mutate(
-    sample = paste(treatment, time, rep)
-  ) %>%
+  filter(treatment %in% c("NS", "Bud")) %>%
+  mutate(sample = paste(treatment, time, rep)) %>%
   select(Gene, sample, log2tpm) %>%
-  pivot_wider(
-    names_from = sample,
-    values_from = log2tpm
-  ) %>%
+  pivot_wider(names_from = sample, values_from = log2tpm) %>%
   column_to_rownames("Gene") %>%
   as.matrix()
 
-# Remove genes with zero variance
-mat = mat[
-  apply(mat, 1, var, na.rm = TRUE) > 0,
-  ,
-  drop = FALSE
-]
+mat = mat[apply(mat, 1, var, na.rm = TRUE) > 0, , drop = FALSE]
 
-# -------------------------------------------------------------------------
 # PCA
-# -------------------------------------------------------------------------
-
-pca = prcomp(
-  t(mat),
-  center = TRUE,
-  scale. = FALSE
-)
+pca = prcomp(t(mat), center = TRUE, scale. = FALSE)
 
 # Percent variance explained
-percent_var = 100 * pca$sdev^2 / sum(pca$sdev^2)
+percent_var = data.frame(
+  PC = paste0("PC", seq_along(pca$sdev)),
+  percent_var = 100 * pca$sdev^2 / sum(pca$sdev^2)
+) %>%
+  mutate(cumulative_var = cumsum(percent_var))
 
-# Axis labels
-pc1_label = paste0("PC1 (", round(percent_var[1], 1), "%)")
-pc2_label = paste0("PC2 (", round(percent_var[2], 1), "%)")
-
-# -------------------------------------------------------------------------
 # PCA dataframe
-# -------------------------------------------------------------------------
-
 pca_df = as.data.frame(pca$x) %>%
   rownames_to_column("sample") %>%
-  separate(
-    sample,
-    into = c("treatment", "time", "rep"),
-    sep = " "
-  ) %>%
+  separate(sample, into = c("treatment", "time", "rep"), sep = " ") %>%
   mutate(
-    treatment = factor(
-      treatment,
-      levels = c("NS", "IL1B")
-    ),
-    time = factor(
-      time,
-      levels = c(1, 2, 6, 12, 24)
-    )
+    treatment = factor(treatment, levels = c("NS", "IL1B", "Bud", "I+B")),
+    time = factor(time, levels = c(1, 2, 6, 12, 24))
   )
 
-# -------------------------------------------------------------------------
-# Distance of IL1B samples from matched NS samples
-# -------------------------------------------------------------------------
-
+# Euclidean distance from matched NS samples (PC1 and PC2)
 pca_distance = pca_df %>%
-  select(
-    treatment,
-    rep,
-    time,
-    PC1,
-    PC2
-  ) %>%
+  select(treatment, rep, time, PC1, PC2) %>%
   left_join(
     pca_df %>%
       filter(treatment == "NS") %>%
-      select(
-        rep,
-        time,
-        PC1,
-        PC2
-      ) %>%
-      rename(
-        PC1_NS = PC1,
-        PC2_NS = PC2
-      ),
+      select(rep, time, PC1, PC2) %>%
+      rename(PC1_NS = PC1, PC2_NS = PC2),
     by = c("rep", "time")
   ) %>%
   filter(treatment != "NS") %>%
-  mutate(
-    dist = sqrt(
-      (PC1 - PC1_NS)^2 +
-      (PC2 - PC2_NS)^2
-    )
-  ) %>%
-  select(
-    treatment,
-    time,
-    rep,
-    dist
-  )
+  mutate(dist = sqrt((PC1 - PC1_NS)^2 + (PC2 - PC2_NS)^2)) %>%
+  select(treatment, time, rep, dist)
 
-# -------------------------------------------------------------------------
 # PCA plot
-# -------------------------------------------------------------------------
-
-ggplot(
-  pca_df,
-  aes(
-    x = PC1,
-    y = PC2
-  )
-) +
+ggplot(pca_df, aes(x = PC1, y = PC2)) +
   geom_point(
-    aes(
-      color = time,
-      shape = treatment
-    )
+    aes(fill = log2(as.numeric(as.character(time))), shape = treatment),
+    stroke = 0.4
   ) +
-  theme(
-    aspect.ratio = 1
-  ) +
+  scale_shape_manual(values = c(21, 24, 22)) +
+  scale_fill_viridis_c() +
   labs(
-    x = pc1_label,
-    y = pc2_label,
-    color = NULL,
+    x = paste0("PC1 (", round(percent_var$percent_var[1], 1), "%)"),
+    y = paste0("PC2 (", round(percent_var$percent_var[2], 1), "%)"),
     shape = NULL
-  )
+  ) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1,
+    legend.position = "none"
+    )
 
-# -------------------------------------------------------------------------
+# # 3D PCA plot
+# plotly::plot_ly(
+#   pca_df,
+#   x = ~PC1, y = ~PC2, z = ~PC3,
+#   color = ~as.numeric(as.character(time)),
+#   colors = "viridis",
+#   symbol = ~treatment,
+#   symbols = c("circle-open", "circle", "square"),
+#   type = "scatter3d",
+#   mode = "markers",
+#   marker = list(
+#     size = 5,
+#     showscale = TRUE,
+#     colorbar = list(title = "Time")
+#   )
+# ) %>%
+#   plotly::layout(
+#     scene = list(
+#       xaxis = list(title = paste0("PC1 (", round(percent_var$percent_var[1], 1), "%)")),
+#       yaxis = list(title = paste0("PC2 (", round(percent_var$percent_var[2], 1), "%)")),
+#       zaxis = list(title = paste0("PC3 (", round(percent_var$percent_var[3], 1), "%)")),
+#       aspectmode = "cube"
+#     )
+#   )
+
 # Distance from matched NS
-# -------------------------------------------------------------------------
+ggplot(pca_distance, aes(x = time, y = dist)) +
+  stat_summary(geom = "col", fun = "mean") +
+  geom_point(shape = 21, fill = "white") +
+  labs(x = "Time", y = "Euclidean distance from NS")
 
-ggplot(
-  pca_distance,
-  aes(
-    x = time,
-    y = dist
-  )
-) +
-  stat_summary(
-    geom = "col",
-    fun = "mean"
-  ) +
-  geom_point(
-    shape = 21,
-    fill = "white"
-  ) +
-  labs(
-    x = "Time",
-    y = "Euclidean distance from NS"
-  )
+# # scree
+# ggplot(percent_var, aes(x = seq_along(PC), y = percent_var)) +
+#   geom_col() +
+#   scale_x_continuous(breaks = seq_along(percent_var$PC)) +
+#   labs(x = "Principal component", y = "Variance explained (%)") +
+#   theme(aspect.ratio = 1)
+# 
+# # cumulative variance
+# ggplot(percent_var, aes(x = seq_along(PC), y = cumulative_var)) +
+#   geom_line() +
+#   geom_point() +
+#   scale_x_continuous(breaks = seq_along(percent_var$PC)) +
+#   labs(x = "Number of PCs", y = "Cumulative variance explained (%)") +
+#   theme(aspect.ratio = 1)
 
+ggsave("bud-pca.png", h = 1.5, w = 1.5, dpi = 600)
+
+ggsave("il1b-pca.png", h = 2.5, w = 3, dpi = 600)
 
 cleanup_objects()
 ```
@@ -431,7 +394,7 @@ Heatmap(
   show_row_names = FALSE,
   show_column_names = FALSE,
   column_split = columnSplits,
-  row_split = clusters_up,
+  # row_split = clusters_up,
   border = TRUE,
   use_raster = TRUE,
   name = "log2fold"
@@ -451,7 +414,7 @@ Heatmap(
   show_row_names = FALSE,
   show_column_names = FALSE,
   column_split = columnSplits,
-  row_split = clusters_dn,
+  # row_split = clusters_dn,
   border = TRUE,
   use_raster = TRUE,
   name = "log2fold"
@@ -528,7 +491,7 @@ cleanup_objects()
 
 GO on each timepoint
 
-```{r fig 1f}
+```{r fig 1f, fig.height=3.5, fig.width=7}
 
 # ========================================
 #               run GO
@@ -597,7 +560,7 @@ for (t in c(1, 2, 6, 12, 24)) {
       !Description_clean %in% claimed
     ) %>%
     arrange(desc(FoldEnrichment)) %>%
-    slice_head(n = 5)
+    slice_head(n = 3)
   
   df_list[[as.character(t)]] <- tmp
   
@@ -655,10 +618,12 @@ ggplot(df_plot, aes(
     values = c(0.3, 1),
     guide = "none"
   ) +
+  theme_bw() +
   theme(
     aspect.ratio = 3
   ) +
-  scale_color_gradient(low = "steelblue2", high = "firebrick2")
+  scale_color_gradient(low = "steelblue2", high = "firebrick2") +
+  labs(x = "time", y = NULL)
 
 
 # cleanup_objects()
