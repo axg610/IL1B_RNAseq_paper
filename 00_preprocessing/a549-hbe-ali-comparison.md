@@ -275,6 +275,8 @@ s2c_hbe_2h <- filter(s2c, time == 2 & celltype == "HBE")
 s2c_hbe_6h <- filter(s2c, time == 6 & celltype == "HBE")
 s2c_hbe_24h <- filter(s2c, time == 24 & celltype == "HBE")
 
+s2c_hbe_tc = filter(s2c, celltype == "HBE")
+
 # add more s2cs here
 ```
 
@@ -608,6 +610,8 @@ lrt2_results = sleuth_results(so_il1b_6h, "reduced:full", test_type = "lrt") %>%
 write_tsv(lrt2_results, "sleuth/A549vsPrimary_lrt2_IL1B_6h.txt")
 ```
 
+
+
 ```r ~treatment model, HBE timecourse
 so_hbe_2h = sleuth_prep(
     sample_to_covariates = s2c_hbe_2h,
@@ -714,7 +718,31 @@ results_hbe_tc = rbind(a,b,c,d,e,f,g,h,i) %>%
 write_tsv(results_hbe_tc, "sleuth/hbe_timecourse_dea.txt")
 ```
 
+```r HBE timecourse, pull TPMs
+so_hbe_tc = sleuth_prep(
+    sample_to_covariates = s2c_hbe_tc,
+    target_mapping = t2g,
+    gene_mode = TRUE, aggregation_column = "Gene",
+    filter_fun = new_filter, 
+    num_cores = 4
+    )
 
+tpm_hbe_tc <- kallisto_table(so_hbe_tc, use_filtered = FALSE) %>%
+    select(Gene = target_id, rep, celltype, treatment, time, tpm) %>%
+    arrange(Gene, celltype, time, treatment) %>%
+    filter(grepl("^[A-Za-z0-9]+$", Gene)) %>%
+    group_by(Gene) %>%
+    filter(!all(tpm == 0)) %>%
+    ungroup() %>%
+    mutate(log2tpm = log2(tpm + 0.1)) %>%
+    group_by(Gene, celltype, time) %>%
+    mutate(log2fold = log2tpm - log2tpm[treatment == "NS"]) %>%
+    ungroup() %>%
+    mutate(fold = 2^log2fold) %>%
+    select(Gene, rep, celltype, treatment, time, tpm, log2tpm, fold, log2fold)
+
+write_tsv(tpm_hbe_tc, "sleuth/hbe_timecourse_tpm.txt")
+```
 
 ### DESeq2 modelling and DEA work
 
