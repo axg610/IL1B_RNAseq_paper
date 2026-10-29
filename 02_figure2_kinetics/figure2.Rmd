@@ -48,41 +48,41 @@ run_kmeans <- function(
     ttt = "IL1B",
     clusterOptimizationMode = F
 ){
+  
+  # build matrix
+  mat = dataFrame %>%
+    filter(treatment == ttt & Gene %in% geneList) %>%
+    select(Gene, time, log2fold) %>%
+    pivot_wider(names_from = "time", values_from = "log2fold") %>%
+    column_to_rownames("Gene") %>%
+    t() %>% scale() %>% t()
+  
+  if (!clusterOptimizationMode){
     
-    # build matrix
-    mat = dataFrame %>%
-      filter(treatment == ttt & Gene %in% geneList) %>%
-      select(Gene, time, log2fold) %>%
-      pivot_wider(names_from = "time", values_from = "log2fold") %>%
-      column_to_rownames("Gene") %>%
-      t() %>% scale() %>% t()
+    # run clustering
+    set.seed(777)
+    clust = mat %>%
+      kmeans(centers = nClusters, nstart = nClusters, iter.max = 100) %>%
+      .$cluster %>%
+      as.data.frame(nm = "cluster") %>%
+      mutate(cluster = paste0(clusterPrefix, cluster)) %>%
+      rownames_to_column("Gene")
     
-    if (!clusterOptimizationMode){
-      
-      # run clustering
-      set.seed(777)
-      clust = mat %>%
-        kmeans(centers = nClusters, nstart = nClusters, iter.max = 100) %>%
-        .$cluster %>%
-        as.data.frame(nm = "cluster") %>%
-        mutate(cluster = paste0(clusterPrefix, cluster)) %>%
-        rownames_to_column("Gene")
-      
-      return(clust)
-      
-    }
+    return(clust)
     
-    else {
-      
-      # optimize #clusters
-      sil = fviz_nbclust(mat, kmeans, method = "silhouette", linecolor = "black")
-      wss = fviz_nbclust(mat, kmeans, method = "wss", linecolor = "black")
-      
-      print(sil)
-      print(wss)
-      
-    }
+  }
+  
+  else {
     
+    # optimize #clusters
+    sil = fviz_nbclust(mat, kmeans, method = "silhouette", linecolor = "black")
+    wss = fviz_nbclust(mat, kmeans, method = "wss", linecolor = "black")
+    
+    print(sil)
+    print(wss)
+    
+  }
+  
 }
 
 # run tests
@@ -149,18 +149,18 @@ df = tc_dea %>%
   filter(
     !is.na(cluster),
     treatment == "IL1B"
-    )
+  )
 
 ggplot(
   df,
   aes(x = time, y = log2fold)
-  ) +
+) +
   facet_wrap(~cluster) +
   stat_summary(
     aes(group = cluster),
     geom = "line",
     fun = "mean"
-    ) +
+  ) +
   geom_hline(yintercept = 0, linetype = "dashed")
 
 saveRDS(cluster_assignments, "../results/figure2/cluster_assignments.rds")
@@ -178,7 +178,7 @@ df = tc_dea %>%
   filter(
     !is.na(cluster),
     treatment == "IL1B"
-    )
+  )
 
 ggplot(
   df,
@@ -245,7 +245,7 @@ cleanup_objects()
 ```{r run gene ontology}
 # # enrichGO function
 # run_enrichGO <- function(
-#   geneList,
+    #   geneList,
 #   geneUniverse = unique(tc_tpm$Gene),
 #   geneOntology = "BP",
 #   groupName = "groupName",
@@ -333,7 +333,7 @@ prep_go <- function(
     df,
     countThreshold = 15,
     nTerms = 10
-    ) {
+) {
   
   df %>%
     filter(Count >= countThreshold, p.adjust <= 0.05) %>%
@@ -400,7 +400,7 @@ base_plot(
   fill_limits = fillLimits,
   size_limits = sizeLimits
   
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["up_early"]], nTerms = 5), 
@@ -408,35 +408,35 @@ base_plot(
   fill_limits = fillLimits,
   size_limits = sizeLimits
   
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["up_mid"]], nTerms = 5), 
   "up_mid", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["up_mid-late"]], nTerms = 5), 
   "up_mid-late", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["up_late"]], nTerms = 5, countThreshold = 10), 
   "up_late", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["up_sustained"]], nTerms = 5), 
   "up_sustained", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 # ===========
 
@@ -445,28 +445,28 @@ base_plot(
   "dn_early", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["dn_mid"]], countThreshold = 15, nTerms = 5), 
   "dn_mid", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["dn_mid-late"]], countThreshold = 15, nTerms = 5), 
   "dn_mid-late", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 base_plot(
   prep_go(clusters_enrichGO[["dn_late"]], countThreshold = 5, nTerms = 5), 
   "down_late", 
   fill_limits = fillLimits,
   size_limits = sizeLimits
-  )
+)
 
 cleanup_objects()
 
@@ -683,7 +683,7 @@ ggplot(aREA_results, aes(x = NES, y = reorder(tf, NES))) +
     ~ groupName, 
     scales = "free_y",
     ncol = 1
-    ) +
+  ) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   geom_col() +
   labs(
@@ -734,7 +734,7 @@ for (g in c(
     pivot_wider(values_from = "log2fold", names_from = "time") %>%
     column_to_rownames("Gene") %>%
     as.matrix()
-
+  
   activity = tryCatch(
     viper::viper(
       mat,
@@ -747,11 +747,11 @@ for (g in c(
       return(NULL)
     }
   )
-
+  
   if (!is.null(activity)) {
     activity_matrices[[g]] = activity
   }
-
+  
   rm(g, goi, min_size, mat, activity)
 }
 
@@ -829,13 +829,13 @@ for(nm in names(activity_matrices)){
 
 cluster_string_networks = readRDS(
   "../results/figure2/cluster_string_networks.rds"
-  )
+)
 ```
 
 ```{r plot full networks for each cluster, fig.width=3, fig.height=3}
 cluster_string_networks = readRDS(
   "../results/figure2/cluster_string_networks.rds"
-  )
+)
 
 for(gn in unique(cluster_assignments$groupName)){
   g = cluster_string_networks[[gn]] %>%
@@ -867,8 +867,10 @@ for(gn in unique(cluster_assignments$groupName)){
       aspect.ratio = 1
     ) +
     scale_y_continuous(expand = expansion(mult = 0.1)) +
-    scale_x_continuous(expand = expansion(mult = 0.1)) +
-    labs(title = gn)
+    scale_x_continuous(expand = expansion(mult = 0.1)) 
+  
+  # +
+  #   labs(title = gn)
   
   ggsave(
     paste0("../results/figure2/stringdb images/", gn, ".jpg"),
@@ -892,7 +894,7 @@ for(gn in unique(cluster_assignments$groupName)){
     ) +
     scale_y_continuous(expand = expansion(mult = 0.1)) +
     scale_x_continuous(expand = expansion(mult = 0.1)) +
-    labs(title = paste0(gn , " (labelled"))
+    labs(title = paste0(gn , " (labelled)"))
   
   ggsave(
     paste0("../results/figure2/stringdb images/", gn, "-labelled.jpg"),
@@ -902,14 +904,176 @@ for(gn in unique(cluster_assignments$groupName)){
 }
 
 cleanup_objects()
-
-# calculate % genes mapped, number of connections, density, etc.
-
 ```
 
 
 
-```{r stringdb to visualize subnetworks, fig.width=4, fig.height=3}
+```{r calculate network stats}
+cluster_string_networks = readRDS(
+  "../results/figure2/cluster_string_networks.rds"
+)
+
+cluster_assignments = readRDS("../results/figure2/cluster_assignments.rds")
+
+# number of genes in each kinetic cluster
+cluster_sizes <- cluster_assignments %>%
+  group_by(groupName) %>%
+  mutate(n_input_genes = n_distinct(Gene)) %>%
+  ungroup() %>%
+  select(-c(Gene, peak)) %>%
+  distinct()
+
+# calculate network stats for each kinetic cluster
+network_stats <- imap_dfr(cluster_string_networks, function(edges, gn) {
+  
+  edges <- edges %>%
+    select(from, to, combined_score) %>%
+    filter(from != to) %>%
+    mutate(a = pmin(from, to), b = pmax(from, to)) %>%
+    distinct(a, b) %>%
+    transmute(from = a, to = b)
+  
+  g <- graph_from_data_frame(edges, directed = FALSE)
+  comm <- cluster_louvain(g)
+  
+  tibble(
+    groupName = gn,
+    n_genes = vcount(g),
+    n_edges = ecount(g),
+    mean_degree = mean(degree(g)),
+    density = edge_density(g),
+    n_neighbourhoods = length(comm),
+    modularity = modularity(comm)
+  )
+}) %>%
+  left_join(cluster_sizes, by = "groupName") %>%
+  mutate(coverage_pct = 100 * n_genes / n_input_genes) %>%
+  select(
+    groupName, cluster, peak_sig, shape,
+    n_input_genes, n_genes, coverage_pct,
+    n_edges, mean_degree, density, n_neighbourhoods, modularity
+  )
+
+# calculate size and members for each neighbourhood
+neighbourhood_stats <- imap_dfr(cluster_string_networks, function(edges, gn) {
+  
+  edges <- edges %>%
+    select(from, to) %>%
+    filter(from != to) %>%
+    mutate(a = pmin(from, to), b = pmax(from, to)) %>%
+    distinct(a, b) %>%
+    transmute(from = a, to = b)
+  
+  g <- graph_from_data_frame(edges, directed = FALSE)
+  comm <- cluster_louvain(g)
+  
+  tibble(
+    Gene = names(membership(comm)),
+    neighbourhood = as.integer(membership(comm))
+  ) %>%
+    group_by(neighbourhood) %>%
+    summarise(
+      n_genes = n(),
+      genes = list(Gene),
+      genes_collapsed = paste(Gene, collapse = ", "),
+      .groups = "drop"
+    ) %>%
+    mutate(groupName = gn, .before = 1)
+  
+}) %>%
+  arrange(groupName, neighbourhood)
+
+write_tsv(network_stats, "../results/figure2/network_stats.txt")
+
+saveRDS(neighbourhood_stats, "../results/figure2/neighbourhood_stats.rds")
+
+cleanup_objects()
+```
+
+```{r plot network stats, fig.height=3, fig.width=3}
+
+network_stats = read_tsv("../results/figure2/network_stats.txt")
+
+neighbourhood_stats = readRDS("../results/figure2/neighbourhood_stats.rds")
+
+df = network_stats %>%
+  filter(peak_sig == "up") %>%
+  mutate(shape = factor(
+    shape, 
+    levels = c(
+      "immediate", 
+      "early", 
+      "sustained", 
+      "mid", 
+      "mid-late", 
+      "late")))
+
+myColors = c("#482173", "#2E6F8E", "#2E6F8E", "#29AF7F", "#29AF7F", "#BDDF26")
+
+ggplot(
+  df,
+  aes(y = fct_rev(shape), x = n_input_genes, fill = shape)
+) +
+  geom_col(lwd = 0.3, color = "black") +
+  geom_text(aes(label = round(n_genes, 2)), hjust = -0.1) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 2,
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = myColors) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.4)),
+    breaks = scales::breaks_pretty(n = 3)
+    ) +
+  labs(x = "# DEGs", y = NULL)
+
+ggsave("degs per kinetic.png", h = 2.5, w = 3, dpi = 600)
+
+ggplot(
+  df,
+  aes(y = fct_rev(shape), x = mean_degree, fill = shape)
+) +
+  geom_col(lwd = 0.3, color = "black") +
+  geom_text(aes(label = round(mean_degree, 2)), hjust = -0.1) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 2,
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = myColors) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.5)),
+    breaks = scales::breaks_pretty(n = 3)
+    ) +
+  labs(x = "mean # connections per gene", y = NULL)
+
+ggsave("mean connections per kinetic.png", h = 2.5, w = 3, dpi = 600)
+
+ggplot(
+  df,
+  aes(y = fct_rev(shape), x = n_neighbourhoods, fill = shape)
+) +
+  geom_col(lwd = 0.3, color = "black") +
+  geom_text(aes(label = round(n_neighbourhoods, 2)), hjust = -0.1) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 2,
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = myColors) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.4)),
+    breaks = scales::breaks_pretty(n = 3)
+    ) +
+  labs(x = "# Louvain communities", y = NULL)
+
+ggsave("communities per kinetic.png", h = 2.5, w = 3, dpi = 600)
+```
+
+
+
+```{r manually visualize subnetworks, fig.width=5, fig.height=4}
 # genes = c(
 #   "FOSL1", "EGR3", "TRIB1", "JUNB", "EGR2", "EGR1",
 #   "FOSB", "FOS", "DUSP5", "JUN", "NR4A2", "NR4A1",
@@ -931,15 +1095,21 @@ cleanup_objects()
 #   "RSAD2", "IFI44L", "SAMD9L", "MX2", "IFIT2",
 #   "SAMHD1", "CMPK2", "GBP1"
 # )
-# # up_mid, w=4, h=5
+# # up_mid, w=5, h=2
 
-genes = c(
-  "NOS2", "PTGS2", "CD40",
-  "VCAM1", "ICAM1", "IL1B",
-  "ZC3H12A", "CXCR4", "CCL4", "CCL2", "CXCL10", "IL15",
-  "CXCR2", "CX3CL1", "IL7",
-  "CCL1", "CCL22"
-)
+# genes = c(
+#   "NOS2", "PTGS2", "CD40",
+#   "VCAM1", "ICAM1", "IL1B",
+#   "ZC3H12A", "CXCR4", "CCL4", "CCL2", "CXCL10", "IL15",
+#   "CXCR2", "CX3CL1", "IL7",
+#   "CCL1", "CCL22"
+# )
+
+genes = c("DHX58", "HERC6", "HERC5", "NMI", "EPSTI1", "BST2", "IFITM1", "OAS2",
+          "ISG20", "IFI6", "STAT1", "IFI16", "GBP2", "IFI44",
+          "IRF9", "IRF7", "MX1", "OAS1", "IFI35", "IKBKE", "IFI27",
+          "ISG15", "PARP12", "TRIM22")
+# # up_mid-late, w=4, h=5
 
 # interaction database
 string_db = STRINGdb$new(
