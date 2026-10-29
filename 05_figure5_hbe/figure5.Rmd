@@ -302,23 +302,108 @@ ggplot(
 
 
 
+```{r pairwise correlations between all cell types}
+
+# for(s in list(c("up"), c("dn"), c("up", "dn"))){
+for (s in c("up", "dn", "up/dn")){
+  
+  goi <- switch(
+    s,
+    "up" = primary_dea %>%
+      filter(treatment == "IL1B", log2fold > 0, FDR < 0.05) %>%
+      pull(Gene),
+    "dn" = primary_dea %>%
+      filter(treatment == "IL1B", log2fold < 0, FDR < 0.05) %>%
+      pull(Gene),
+    "up/dn" = primary_dea %>%
+      filter(treatment == "IL1B", FDR < 0.05) %>%
+      pull(Gene)
+  )
+  
+  # goi = primary_dea %>%
+  #   filter(treatment == "IL1B", sig %in% s) %>%
+  #   pull(Gene) %>%
+  #   unique()
+  
+  mat = primary_tpm %>%
+    filter(treatment == "IL1B", Gene %in% goi) %>%
+    select(Gene, rep, celltype, log2fold) %>%
+    unite(name, c(celltype, rep), sep = "_") %>%
+    pivot_wider(names_from = "name", values_from = "log2fold") %>%
+    column_to_rownames("Gene") %>%
+    as.matrix()
+  
+  cor = cor(mat, method = "pearson")
+  
+  print(
+    Heatmap(
+      cor,
+      col = circlize::colorRamp2(seq(0, 1, length.out = 100), viridisLite::viridis(100)),
+      width = unit(6, "cm"),
+      height = unit(6, "cm"),
+      name = "Pearson",
+      cluster_columns = F,
+      cluster_rows = F,
+      # column_title = paste(s, collapse = "_")
+      column_title = paste0("6h ", s, " (", length(goi), " genes)")
+    )
+  )
+}
+
+cleanup_objects()
+```
+
+```{r pairwise correlations between hbe donors at all times}
+
+hbe_tc_tpm = read_tsv("../data/raw/hbe_timecourse_tpm.txt")
+
+hbe_tc_dea = read_tsv("../data/raw/hbe_timecourse_dea.txt") %>%
+  mutate(
+    sig = case_when(
+      log2fold >= 0 & FDR < 0.05 ~ "up",
+      log2fold <= 0 & FDR < 0.05 ~ "dn",
+      TRUE ~ "ns"
+    )
+  )
+
+for(s in list(c("up"), c("dn"), c("up", "dn"))){
+  for (t in c(2, 6, 24)){
+    
+    goi = hbe_tc_dea %>%
+      filter(treatment == "IL1B", sig %in% s) %>%
+      pull(Gene) %>%
+      unique()
+    
+    mat = hbe_tc_tpm %>%
+      filter(time == t, treatment == "IL1B", Gene %in% goi) %>%
+      unite(name, c(celltype, rep), sep = "_") %>%
+      select(Gene, name, log2fold) %>%
+      pivot_wider(names_from = "name", values_from = "log2fold") %>%
+      column_to_rownames("Gene") %>%
+      as.matrix()
+    
+    cor = cor(mat, method = "pearson")
+    
+    print(
+      Heatmap(
+        cor,
+        col = circlize::colorRamp2(seq(0, 1, length.out = 100), viridisLite::viridis(100)),
+        width = unit(6, "cm"),
+        height = unit(6, "cm"),
+        name = "Pearson",
+        cluster_columns = F,
+        cluster_rows = F,
+        column_title = paste0(t, "h, ", paste(s, collapse = "/"), " (", length(goi), " genes)")
+      )
+    )
+    
+  }
+}
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
 
 
 
